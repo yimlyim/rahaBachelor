@@ -11,10 +11,15 @@
 
 ########################################
 import re
+import os
 import sys
 import html
 
+import time
 import pandas
+import dask
+import dask.dataframe as dd
+from distributed import Client, LocalCluster
 ########################################
 
 
@@ -48,20 +53,27 @@ class Dataset:
         value = html.unescape(value)
         value = re.sub("[\t\n ]+", " ", value, re.UNICODE)
         value = value.strip("\t\n ")
+
         return value
 
     def read_csv_dataset(self, dataset_path):
         """
         This method reads a dataset from a csv file path.
         """
-        kwargs = {'sep': ',', 'header':'infer', encoding:'utf-8', 'dtype': str, 'keep_default_na': False, 'low_memory': False}
-        MB_25 = 25e6
+
+        #Params to get passed to pandas read_csv function
+        kwargs = {'sep': ',', 'header':'infer', 'encoding':'utf-8', 'dtype': str, 'keep_default_na': False, 'low_memory': False}
+
+        #Calculate File Size in Bytes to determine Blocksizes.
+        filesize = os.path.getsize(dataset_path)
+        sizeOfBlock = (int((filesize / 1e6)/100) + 1)*1e6 #Try 100 Partitions based on size of file, minimum 1MB
 
 
-        dset = dd.read_csv(urlpath=dataset_path, blocksize=MB_25, **kwargs)
-        normalized_dset = dset.dataframe.applymap(self.value_normalizer)
+        dset = dd.read_csv(urlpath=dataset_path, blocksize=sizeOfBlock, **kwargs)
+        normalized_dset = dset.applymap(self.value_normalizer)
+        print(normalized_dset)
 
-        return ndset
+        return normalized_dset
 
     @staticmethod
     def write_csv_dataset(dataset_path, dataframe):
@@ -140,10 +152,21 @@ class Dataset:
 ########################################
 if __name__ == "__main__":
     dataset_dict = {
-        "name": "toy",
-        "path": "datasets/dirty.csv",
-        "clean_path": "datasets/clean.csv"
+        "name": "movies_1",
+        "path": "datasets/movies_1/dirty.csv",
+        "clean_path": "datasets/movies_1/clean.csv"
     }
-    d = Dataset(dataset_dict)
-    print(d.get_data_quality())
+    dset = Dataset(dataset_dict)
+    dframe = dset.dataframe
+    print(dframe)
+
+    cluster = LocalCluster(n_workers=4, threads_per_worker=8)
+    client = Client(cluster)
+    dframe = client.persist(dframe)
+    
+    print(dframe.compute())
+
+
+
+    #print(d.get_data_quality())
 ########################################
