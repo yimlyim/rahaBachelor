@@ -267,6 +267,7 @@ class DetectionParallel:
         endtime = time.time()
         #print("\n\n\nRan strategies, this is the generated metadata:")
         #print(results)
+        #
         print("Raha strategy metadata generation(parallel): "+  str(endtime - starttime))
         return
 
