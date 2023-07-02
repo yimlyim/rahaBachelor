@@ -30,7 +30,7 @@ import hashlib
 
 
 ########################################
-class Dataset:
+class DatasetParallel:
     """
     The dataset class.
     """
@@ -97,7 +97,7 @@ class Dataset:
 
     @staticmethod
     def create_shared_split_dataframe(dataframe_ref):
-        dataframe = DetectionParallel.load_shared_dataframe(dataframe_ref)
+        dataframe = DatasetParallel.load_shared_dataframe(dataframe_ref)
 
         for column in dataframe.columns.tolist():
             pickled_dataframe = pickle.dumps(dataframe[column], protocol=pickle.HIGHEST_PROTOCOL)

@@ -32,7 +32,7 @@ from multiprocessing import shared_memory as sm
 import dask
 from dask.distributed import get_worker
 import dask.dataframe
-import dataset as dset
+import dataset_parallel as dp
 
 ########################################
 class DetectionParallel:
@@ -50,87 +50,6 @@ class DetectionParallel:
                                            RULE_VIOLATION_DETECTION, KNOWLEDGE_BASE_VIOLATION_DETECTION]
         self.HISTORICAL_DATASETS = []
     
-
-    @staticmethod
-    def create_shared_dataset(dataset):
-        pickled_dataset = pickle.dumps(dataset, protocol=pickle.HIGHEST_PROTOCOL)
-        pickled_dataset_size = len(pickled_dataset)
-        shared_mem_area = sm.SharedMemory(name=dataset.own_mem_ref, create=True, size=pickled_dataset_size)
-        shared_mem_area.buf[:pickled_dataset_size] = pickled_dataset
-
-        shared_mem_area.close()
-        del shared_mem_area
-        return
-    
-    @staticmethod
-    def load_shared_dataset(dataset_ref):
-        shared_mem_area = sm.SharedMemory(name=dataset_ref, create=False)
-        deserialized_dataset = pickle.loads(shared_mem_area.buf)
-
-        shared_mem_area.close()
-        del shared_mem_area
-        return deserialized_dataset
-
-
-    @staticmethod
-    def create_shared_dataframe(dataframe_filepath, mem_area_name):
-        """
-        Creates a shared memory area and stores the dataframe in serialized form byte-wise in there.
-        """   
-        MB_1 = 1e6
-        num_partitions = 10
-        client = get_client()
-        filesize = os.path.getsize(dataframe_filepath)     
-        
-        #Aim for 10 partitions
-        blocksize = filesize / num_partitions if filesize >= num_partitions else MB_1 
-        print("Blocksize of " + dataframe_filepath + " is:" + str(blocksize)) 
-
-        #Read DataFrame in parallel
-        kwargs = {'sep': ',', 'header':'infer', 'encoding':'utf-8', 'dtype': str, 'keep_default_na': False, 'low_memory': False}
-        dataframe = dask.dataframe.read_csv(urlpath=dataframe_filepath, blocksize=int(blocksize), **kwargs).applymap(dset.Dataset.value_normalizer)
-        dataframe = client.compute(dataframe).result()
-
-        pickled_dataframe = pickle.dumps(dataframe, protocol=pickle.HIGHEST_PROTOCOL)
-        pickled_dataframe_size = len(pickled_dataframe)
-        print("Size of pickled dataframe " + str(pickled_dataframe_size))
-
-        shared_mem_area = sm.SharedMemory(name=mem_area_name, create=True, size=pickled_dataframe_size)
-        shared_mem_area.buf[:pickled_dataframe_size] = pickled_dataframe
-
-        shared_mem_area.close()
-        del shared_mem_area
-        return mem_area_name
-
-    @staticmethod
-    def create_shared_split_dataframe(dataframe_ref):
-        dataframe = DetectionParallel.load_shared_dataframe(dataframe_ref)
-
-        for column in dataframe.columns.tolist():
-            pickled_dataframe = pickle.dumps(dataframe[column], protocol=pickle.HIGHEST_PROTOCOL)
-            pickled_dataframe_size = len(pickled_dataframe)
-            shared_mem_area = sm.SharedMemory(name=column, create=True, size=pickled_dataframe_size)
-            shared_mem_area.buf[:pickled_dataframe_size] = pickled_dataframe
-            shared_mem_area.close()
-            del shared_mem_area
-        return
-
-
-
-    @staticmethod
-    def get_column_names(dataframe_filepath):
-        return pandas.read_csv(dataframe_filepath, nrows=0).columns.tolist()
-
-    @staticmethod
-    def load_shared_dataframe(dataframe_ref):
-
-        shared_mem_area = sm.SharedMemory(name=dataframe_ref, create=False)
-        deserialized_frame = pickle.loads(shared_mem_area.buf)
-
-        shared_mem_area.close()
-        del shared_mem_area
-        return deserialized_frame
-
     #Todo
     def run_outlier_strategy(self):
         return {}
@@ -140,10 +59,10 @@ class DetectionParallel:
         """
         """
         outputted_cells = {}
-        dataset = DetectionParallel.load_shared_dataset(dataset_ref)
+        dataset = dp.DatasetParallel.load_shared_dataset(dataset_ref)
         column_name, character = configuration
-        dataframe = DetectionParallel.load_shared_dataframe(column_name)
-        j = DetectionParallel.get_column_names(dataset.dirty_path).index(column_name)
+        dataframe = dp.DatasetParallel.load_shared_dataframe(column_name)
+        j = dp.DatasetParallel.get_column_names(dataset.dirty_path).index(column_name)
 
         for i, value in dataframe.items():
             try:
@@ -227,7 +146,7 @@ class DetectionParallel:
         client = get_client()
 
         #Load Shared DataFrame column by accessing shared memory area, named by column_name
-        dataset_column = DetectionParallel.load_shared_dataframe(column_name)
+        dataset_column = dp.DatasetParallel.load_shared_dataframe(column_name)
 
         #Concatenate all content of a column into a long string
         column_data = "".join(dataset_column.tolist())
@@ -247,8 +166,8 @@ class DetectionParallel:
         futures = []
         configurations = []
         client = get_client()
-        dataset = DetectionParallel.load_shared_dataset(dataset_ref)
-        column_names = DetectionParallel.get_column_names(dataset.dirty_path)
+        dataset = dp.DatasetParallel.load_shared_dataset(dataset_ref)
+        column_names = dp.DatasetParallel.get_column_names(dataset.dirty_path)
         
         #Call a worker for each column name
         arguments1 = [dataset_ref] * len(column_names)
@@ -267,8 +186,8 @@ class DetectionParallel:
         This method just creates pairs of column names as potential FDs
         """
         configurations = []
-        dataset = DetectionParallel.load_shared_dataset(dataset_ref)
-        column_names = DetectionParallel.get_column_names(dataset.dirty_path)
+        dataset = dp.DatasetParallel.load_shared_dataset(dataset_ref)
+        column_names = dp.DatasetParallel.get_column_names(dataset.dirty_path)
         column_pairs = [[col1, col2] for (col1,col2) in itertools.product(column_names, column_names) if col1 != col2]
         configurations.extend([[dataset_ref, RULE_VIOLATION_DETECTION, column_pair] for column_pair in column_pairs])
 
