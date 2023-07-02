@@ -18,6 +18,7 @@ import html
 import pandas
 import dask
 import dask.dataframe as dd
+import constants
 from distributed import Client, LocalCluster
 ########################################
 
@@ -32,8 +33,10 @@ class Dataset:
         """
         The constructor creates a dataset.
         """
-        self.dirty_ref = "Testarea"
-        self.clean_ref = "Testarea2"
+        self.own_mem_ref = constants.DATASET_MEMORY_REF
+        self.dirty_mem_ref = dataset_dictionary["name"]
+        self.clean_mem_ref = dataset_dictionary["name"] + "-clean"
+        self.dirty_path = dataset_dictionary["path"]
         self.name = dataset_dictionary["name"]
         self.path = dataset_dictionary["path"]
         self.dataframe = self.read_csv_dataset(dataset_dictionary["path"])

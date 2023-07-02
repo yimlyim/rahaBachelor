@@ -54,6 +54,10 @@ class DatasetParallel:
 
     @staticmethod
     def create_shared_dataset(dataset):
+        """
+        Creates a shared dataset object. The given dataset will be serialized and its output written into a shared memory area.
+        Other Processes can obtain this area by referencing the shared memory area by its name.
+        """
         pickled_dataset = pickle.dumps(dataset, protocol=pickle.HIGHEST_PROTOCOL)
         pickled_dataset_size = len(pickled_dataset)
         shared_mem_area = sm.SharedMemory(name=dataset.own_mem_ref, create=True, size=pickled_dataset_size)
@@ -67,8 +71,9 @@ class DatasetParallel:
     @staticmethod
     def create_shared_dataframe(dataframe_filepath, mem_area_name):
         """
-        Creates a shared memory area and stores the dataframe in serialized form byte-wise in there.
-        """   
+        Creates a shared dataframe object. The given dataframe will be serialized and its output written into a shared memory area.
+        Other Processes can obtain this area by referencing the shared memory area by its name. 
+        """
         MB_1 = 1e6
         num_partitions = 10
         client = get_client()
@@ -97,6 +102,11 @@ class DatasetParallel:
 
     @staticmethod
     def create_shared_split_dataframe(dataframe_ref):
+        """
+        Creates several shared memory areas. Each area contains a single column of a given dataframe as pandas.Series objects.
+        The given dataframes will be serialized and its output written into the corresponding shared memory area.
+        Other Processes can obtain these areas by referencing the shared memory area by its name.
+        """
         dataframe = DatasetParallel.load_shared_dataframe(dataframe_ref)
 
         for column in dataframe.columns.tolist():
@@ -110,6 +120,10 @@ class DatasetParallel:
 
     @staticmethod
     def load_shared_dataset(dataset_ref):
+        """
+        Loads a shared memory dataset, which is stored and serialized in a shared_memory area(dataset_ref).
+        The loaded dataset will be deserialized and returned.
+        """
         shared_mem_area = sm.SharedMemory(name=dataset_ref, create=False)
         deserialized_dataset = pickle.loads(shared_mem_area.buf)
 
@@ -119,7 +133,10 @@ class DatasetParallel:
 
     @staticmethod
     def load_shared_dataframe(dataframe_ref):
-
+        """
+        Loads a shared memory dataframe, which is stored and serialized in a shared_memory area(dataframe_ref).
+        The loaded dataframe will be deserialized and returned.
+        """
         shared_mem_area = sm.SharedMemory(name=dataframe_ref, create=False)
         deserialized_frame = pickle.loads(shared_mem_area.buf)
 
@@ -129,6 +146,9 @@ class DatasetParallel:
 
     @staticmethod
     def get_column_names(dataframe_filepath):
+        """
+        Returns a List of the column names of a given dataframe csv file.
+        """
         return pandas.read_csv(dataframe_filepath, nrows=0).columns.tolist()
 
 
