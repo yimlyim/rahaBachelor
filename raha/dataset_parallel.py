@@ -86,7 +86,7 @@ class DatasetParallel:
 
         #Read DataFrame in parallel
         kwargs = {'sep': ',', 'header':'infer', 'encoding':'utf-8', 'dtype': str, 'keep_default_na': False, 'low_memory': False}
-        dataframe = dask.dataframe.read_csv(urlpath=dataframe_filepath, blocksize=int(blocksize), **kwargs).applymap(dset.Dataset.value_normalizer)
+        dataframe = dask.dataframe.read_csv(urlpath=dataframe_filepath, blocksize=int(blocksize), **kwargs).applymap(DatasetParallel.value_normalizer)
         dataframe = client.compute(dataframe).result()
 
         pickled_dataframe = pickle.dumps(dataframe, protocol=pickle.HIGHEST_PROTOCOL)
@@ -163,6 +163,7 @@ class DatasetParallel:
             dataframe.to_csv(destination_path, sep=",", header=True, index=False, encoding="utf-8")    
         else:
             if copy and source_path is not None:
+                #print("Copying file from: " + source_path + " to: " + destination_path)
                 source_path = source_path
                 destination_path = destination_path
                 shutil.copy(source_path, destination_path)

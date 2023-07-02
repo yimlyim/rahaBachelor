@@ -68,15 +68,15 @@ class DetectionParallel:
         raha.tools.dBoost.dboost.imported_dboost.run(parameters)
 
         dboost_result_path = dataset_path + "-dboost_output.csv"
-        if os.path.exists(dboost_result_path):
+        if os.path.exists(dboost_result_path) and os.path.getsize(dboost_result_path) > 0:
             dboost_dataframe = pandas.read_csv(dboost_result_path, sep=",", header=None, encoding="utf-8",
                                                dtype=str, keep_default_na=False, low_memory=False).apply(lambda x: x.str.strip())
 
             for i, j in dboost_dataframe.values.tolist():
                 if int(i) > 0:
                     outputted_cells[(int(i)-1, int(j))] = ""
-             #os.remove(dboost_result_path)       
-        #os.remove(dataset_path)
+            os.remove(dboost_result_path)       
+        os.remove(dataset_path)
 
         return outputted_cells
         
