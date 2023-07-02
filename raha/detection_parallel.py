@@ -31,6 +31,7 @@ from dask.distributed import get_client
 from multiprocessing import shared_memory as sm
 import dask
 import dask.dataframe
+import dataset as dset
 
 ########################################
 class DetectionParallel:
@@ -57,15 +58,14 @@ class DetectionParallel:
         client = get_client()
         filesize = os.path.getsize(dataframe_filepath)     
         
-
         #Aim for 10 partitions
         blocksize = filesize / num_partitions if filesize >= num_partitions else MB_1 
         print("Blocksize of " + dataframe_filepath + " is:" + str(blocksize)) 
 
+        #Read DataFrame in parallel
         kwargs = {'sep': ',', 'header':'infer', 'encoding':'utf-8', 'dtype': str, 'keep_default_na': False, 'low_memory': False}
-        dataset = dask.dataframe.read_csv(urlpath=dataframe_filepath, blocksize=int(blocksize), **kwargs)
+        dataset = dask.dataframe.read_csv(urlpath=dataframe_filepath, blocksize=int(blocksize), **kwargs).applymap(dset.Dataset.value_normalizer)
         dataset = client.compute(dataset).result()
-        dataset_size = sys.getsizeof(dataset)
 
         pickled_dataset = pickle.dumps(dataset, protocol=pickle.HIGHEST_PROTOCOL)
         pickled_dataset_size = len(pickled_dataset)
@@ -89,6 +89,7 @@ class DetectionParallel:
             shared_mem_area.buf[:pickled_dataset_size] = pickled_dataset
             shared_mem_area.close()
             del shared_mem_area
+        return
 
 
 
@@ -108,6 +109,7 @@ class DetectionParallel:
 
     #Todo
     def run_outlier_strategy(self):
+
         return
         
     #Todo
@@ -126,6 +128,7 @@ class DetectionParallel:
         """
         Runs all error detection strategies in a seperate worker process.
         """
+        start_time = time.time()
         outputted_cells = {}
         dataset_ref, algorithm, configuration = args
         strategy_name = json.dumps([algorithm, configuration])
@@ -137,9 +140,11 @@ class DetectionParallel:
                 run_outlier_strategy()
             case constants.PATTERN_VIOLATION_DETECTION:
                 #Run pattern violation detection strategy
+                #Needs only column dataframe
                 run_pattern_strategy()
             case constants.RULE_VIOLATION_DETECTION:
                 #Run rule violation detection strategy
+                #NEEDS WHOLE DATAFRAME
                 run_rule_strategy()
             case constants.KNOWLEDGE_BASE_VIOLATION_DETECTION:
                 #Run knowledge base violation strategy
@@ -147,12 +152,13 @@ class DetectionParallel:
             case _:
                 raise ValueError("Algorithm " + str(algorithm) + " is not supported!")
         
+        end_time = time.time()
         strategy_results = {
             "name": strategy_name,
             "output": list(outputted_cells.keys()),
-            "runtime": 1
+            "runtime": end_time - start_time
         }
-
+        
         return strategy_results
     
     @staticmethod
@@ -180,11 +186,8 @@ class DetectionParallel:
         """
         configurations = []
         client = get_client()
-        kwargs = {'sep': ',', 'header':'infer', 'encoding':'utf-8', 'dtype': str, 'keep_default_na': False, 'low_memory': True, 'usecols': [column_name]}
-        #Reads CSV Column with Dask, change to Pandas if too many parallel processes at once
-        #dataset_column = client.compute(dask.dataframe.read_csv(urlpath=dataframe_filepath, blocksize="100MB", **kwargs)).result()
-        #dataset_column = pandas.read_csv(dataframe_filepath, sep=",", header="infer", encoding="utf-8", dtype=str,
-        #                            keep_default_na=False, usecols=[column_name], engine='pyarrow')
+
+        #Load Shared DataFrame column by accessing shared memory area, named by column_name
         dataset_column = DetectionParallel.load_shared_dataframe(column_name)
 
         #Concatenate all content of a column into a long string
@@ -193,8 +196,8 @@ class DetectionParallel:
         character_dict = {character: 1 for character in column_data} 
         character_dict_list = [[column_name, character] for character in character_dict]  
 
-        del dataset_column, character_dict, column_data
         configurations.extend([dataframe_ref, PATTERN_VIOLATION_DETECTION, conf] for conf in character_dict_list)
+        del dataset_column, character_dict, column_data
         return configurations
 
     @staticmethod
@@ -202,12 +205,11 @@ class DetectionParallel:
         """
         Calculates Meta-Data for pattern-violation application later on
         """
-        
-        configurations = []
-        column_names = DetectionParallel.get_column_names(dataframe_filepath)
-        client = get_client()
         futures = []
-
+        configurations = []
+        client = get_client()
+        column_names = DetectionParallel.get_column_names(dataframe_filepath)
+        
         #Call a worker for each column name
         arguments1 = [dataframe_ref] * len(column_names)
         arguments2 = [column_name  for column_name in column_names]
@@ -265,10 +267,13 @@ class DetectionParallel:
         
         results = list(itertools.chain.from_iterable(client.gather(futures=futures, direct=True)))
         endtime = time.time()
-        #print("\n\n\nRan strategies, this is the generated metadata:")
-        #print(results)
-        #
         print("Raha strategy metadata generation(parallel): "+  str(endtime - starttime))
+        #print(results)
+        #Start Detecting Errors in parallel
+        #futures = client.map(self.parallel_strat_runner_process, results)
+        #strategy_profiles = client.gather(futures=futures, direct=True)
+
+
         return
 
 ########################################
