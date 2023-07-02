@@ -30,6 +30,7 @@ import constants
 from dask.distributed import get_client
 from multiprocessing import shared_memory as sm
 import dask
+from dask.distributed import get_worker
 import dask.dataframe
 import dataset as dset
 
@@ -109,20 +110,34 @@ class DetectionParallel:
 
     #Todo
     def run_outlier_strategy(self):
-
-        return
+        return {}
         
     #Todo
-    def run_pattern_strategy(self):
-        return
+    def run_pattern_strategy(self, configuration, dataframe_ref, dataframe_filepath):
+        """
+        """
+        outputted_cells = {}
+        column_name, character = configuration
+        dataframe = DetectionParallel.load_shared_dataframe(column_name)
+        j = DetectionParallel.get_column_names(dataframe_filepath).index(column_name)
+
+        for i, value in dataframe.items():
+            try:
+                if len(re.findall("[" + character + "]", value, re.UNICODE)) > 0:
+                    outputted_cells[(i, j)] = ""
+            except:
+                print("Error occured in run_pattern_strategy in worker  " + str(get_worker().id))
+                continue
+
+        return outputted_cells
 
     #Todo
     def run_rule_strategy(self):
-        return
+        return {}
 
     #Todo        
     def run_knowledge_strategy(self):
-        return
+        return {}
 
     def parallel_strat_runner_process(self, args):
         """
@@ -130,7 +145,7 @@ class DetectionParallel:
         """
         start_time = time.time()
         outputted_cells = {}
-        dataset_ref, algorithm, configuration = args
+        dataframe_ref, algorithm, configuration = args
         strategy_name = json.dumps([algorithm, configuration])
         strategy_name_hashed = str( int( hashlib.sha1( strategy_name.encode("utf-8")).hexdigest(), base=16))
 
@@ -141,7 +156,7 @@ class DetectionParallel:
             case constants.PATTERN_VIOLATION_DETECTION:
                 #Run pattern violation detection strategy
                 #Needs only column dataframe
-                run_pattern_strategy()
+                run_pattern_strategy(configuration, dataframe_ref)
             case constants.RULE_VIOLATION_DETECTION:
                 #Run rule violation detection strategy
                 #NEEDS WHOLE DATAFRAME
@@ -267,8 +282,8 @@ class DetectionParallel:
         
         results = list(itertools.chain.from_iterable(client.gather(futures=futures, direct=True)))
         endtime = time.time()
+        print(results)
         print("Raha strategy metadata generation(parallel): "+  str(endtime - starttime))
-        #print(results)
         #Start Detecting Errors in parallel
         #futures = client.map(self.parallel_strat_runner_process, results)
         #strategy_profiles = client.gather(futures=futures, direct=True)
