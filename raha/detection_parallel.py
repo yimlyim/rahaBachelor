@@ -33,6 +33,7 @@ import dask
 from dask.distributed import get_worker
 import dask.dataframe
 import dataset_parallel as dp
+import raha
 
 ########################################
 class DetectionParallel:
@@ -51,8 +52,33 @@ class DetectionParallel:
         self.HISTORICAL_DATASETS = []
     
     #Todo
-    def run_outlier_strategy(self):
-        return {}
+    def run_outlier_strategy(self, configuration, dataset_ref, strategy_name_hash):
+        """
+        Detects cells which don't match given detection strategy - Outlier Detection.
+        Returns dict, which contains coordinate of potentially defect cells.
+        """
+        outputted_cells = {}
+        dataset = dp.DatasetParallel.load_shared_dataset(dataset_ref)
+        dataframe_ref = dataset.dirty_mem_ref
+        dataset_path = os.path.join(tempfile.gettempdir(), dataset.name + "-" + strategy_name_hash + ".csv")
+        dataset.write_csv(source_path=dataset.dirty_path, destination_path=dataset_path, copy=True)
+
+        parameters = ["-F", ",", "--statistical", "0.5"] + ["--" + configuration[0]] + configuration[1:] + [dataset_path]
+        print("Worker: " + str(get_worker().id) + " started dboost.run")
+        raha.tools.dBoost.dboost.imported_dboost.run(parameters)
+
+        dboost_result_path = dataset_path + "-dboost_output.csv"
+        if os.path.exists(dboost_result_path):
+            dboost_dataframe = pandas.read_csv(dboost_result_path, sep=",", header=None, encoding="utf-8",
+                                               dtype=str, keep_default_na=False, low_memory=False).apply(lambda x: x.str.strip())
+
+            for i, j in dboost_dataframe.values.tolist():
+                if int(i) > 0:
+                    outputted_cells[(int(i)-1, int(j))] = ""
+             #os.remove(dboost_result_path)       
+        #os.remove(dataset_path)
+
+        return outputted_cells
         
     #Todo
     def run_pattern_strategy(self, configuration, dataset_ref):
@@ -63,7 +89,7 @@ class DetectionParallel:
         column_name, character = configuration
         dataframe = dp.DatasetParallel.load_shared_dataframe(column_name)
         j = dp.DatasetParallel.get_column_names(dataset.dirty_path).index(column_name)
-
+        print("Worker: " + str(get_worker().id) + " running core run_pattern part")
         for i, value in dataframe.items():
             try:
                 if len(re.findall("[" + character + "]", value, re.UNICODE)) > 0:
@@ -75,11 +101,11 @@ class DetectionParallel:
         return outputted_cells
 
     #Todo
-    def run_rule_strategy(self):
+    def run_rule_strategy(self, configuration, dataset_ref):
         return {}
 
     #Todo        
-    def run_knowledge_strategy(self):
+    def run_knowledge_strategy(self, configuration, dataset_ref):
         return {}
 
     def parallel_strat_runner_process(self, args):
@@ -88,25 +114,25 @@ class DetectionParallel:
         """
         start_time = time.time()
         outputted_cells = {}
-        dataframe_ref, algorithm, configuration = args
+        dataset_ref, algorithm, configuration = args
         strategy_name = json.dumps([algorithm, configuration])
         strategy_name_hashed = str( int( hashlib.sha1( strategy_name.encode("utf-8")).hexdigest(), base=16))
 
         match algorithm:
             case constants.OUTLIER_DETECTION:
                 #Run outlier detection strategy
-                run_outlier_strategy()
+                outputted_cells = self.run_outlier_strategy(configuration, dataset_ref, strategy_name_hashed)
             case constants.PATTERN_VIOLATION_DETECTION:
                 #Run pattern violation detection strategy
                 #Needs only column dataframe
-                run_pattern_strategy(configuration, dataframe_ref)
+                outputted_cells = self.run_pattern_strategy(configuration, dataset_ref)
             case constants.RULE_VIOLATION_DETECTION:
                 #Run rule violation detection strategy
                 #NEEDS WHOLE DATAFRAME
-                run_rule_strategy()
+                outputted_cells = self.run_rule_strategy(configuration, dataset_ref)
             case constants.KNOWLEDGE_BASE_VIOLATION_DETECTION:
                 #Run knowledge base violation strategy
-                run_knowledge_strategy()
+                outputted_cells = self.run_knowledge_strategy(configuration, dataset_ref)
             case _:
                 raise ValueError("Algorithm " + str(algorithm) + " is not supported!")
         
@@ -226,11 +252,13 @@ class DetectionParallel:
         
         results = list(itertools.chain.from_iterable(client.gather(futures=futures, direct=True)))
         endtime = time.time()
-        #print(results)
+        print(results)
         print("Raha strategy metadata generation(parallel): "+  str(endtime - starttime))
+
         #Start Detecting Errors in parallel
-        #futures = client.map(self.parallel_strat_runner_process, results)
-        #strategy_profiles = client.gather(futures=futures, direct=True)
+        futures = client.map(self.parallel_strat_runner_process, results)
+        strategy_profiles = client.gather(futures=futures, direct=True)
+        print(strategy_profiles)
 
 
         return
