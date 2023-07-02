@@ -14,6 +14,7 @@ import re
 import os
 import sys
 import html
+import shutil
 
 import pandas
 import dask
@@ -150,6 +151,23 @@ class DatasetParallel:
         Returns a List of the column names of a given dataframe csv file.
         """
         return pandas.read_csv(dataframe_filepath, nrows=0).columns.tolist()
+
+    @staticmethod
+    def write_csv(destination_path, dataframe_ref=None, dataframe=None, copy=False, source_path=None):
+        """
+        Writes Dataframe as csv file to given path.
+        """
+        if dataframe_ref is not None:
+            DatasetParallel.load_shared_dataframe(dataframe_ref).to_csv(destination_path, sep=",", header=True, index=False, encoding="utf-8")
+        elif dataframe is not None:
+            dataframe.to_csv(destination_path, sep=",", header=True, index=False, encoding="utf-8")    
+        else:
+            if copy and source_path is not None:
+                source_path = source_path
+                destination_path = destination_path
+                shutil.copy(source_path, destination_path)
+            else:
+                raise ValueError("Not enough values passed in write_csv()!")
 
 
     @staticmethod
