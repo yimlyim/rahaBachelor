@@ -60,11 +60,15 @@ class DetectionParallel:
         outputted_cells = {}
         dataset = dp.DatasetParallel.load_shared_dataset(dataset_ref)
         dataframe_ref = dataset.dirty_mem_ref
-        dataset_path = os.path.join(tempfile.gettempdir(), dataset.name + "-" + strategy_name_hash + ".csv")
-        dataset.write_csv(source_path=dataset.dirty_path, destination_path=dataset_path, copy=True)
+        folder_path = os.path.join(tempfile.gettempdir(), dataset.name +"/")
+        if not os.path.exists(folder_path):
+            os.mkdir(folder_path)
+        dataset_path = os.path.join(tempfile.gettempdir(),dataset.name + "/" + dataset.name + "-" + strategy_name_hash + ".csv")
+        #Save Memory by copying prestripped file, read write_csv function
+        dataset.write_csv(destination_path=dataset_path, dataframe_ref=dataframe_ref)
 
         parameters = ["-F", ",", "--statistical", "0.5"] + ["--" + configuration[0]] + configuration[1:] + [dataset_path]
-        print("Worker: " + str(get_worker().id) + " started dboost.run")
+        #print("Worker: " + str(get_worker().id) + " started dboost.run")
         raha.tools.dBoost.dboost.imported_dboost.run(parameters)
 
         dboost_result_path = dataset_path + "-dboost_output.csv"
@@ -75,9 +79,9 @@ class DetectionParallel:
             for i, j in dboost_dataframe.values.tolist():
                 if int(i) > 0:
                     outputted_cells[(int(i)-1, int(j))] = ""
-            os.remove(dboost_result_path)       
+            os.remove(dboost_result_path)
+               
         os.remove(dataset_path)
-
         return outputted_cells
         
     #Todo
@@ -89,7 +93,7 @@ class DetectionParallel:
         column_name, character = configuration
         dataframe = dp.DatasetParallel.load_shared_dataframe(column_name)
         j = dp.DatasetParallel.get_column_names(dataset.dirty_path).index(column_name)
-        print("Worker: " + str(get_worker().id) + " running core run_pattern part")
+        #print("Worker: " + str(get_worker().id) + " running core run_pattern part")
         for i, value in dataframe.items():
             try:
                 if len(re.findall("[" + character + "]", value, re.UNICODE)) > 0:

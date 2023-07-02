@@ -153,7 +153,7 @@ class DatasetParallel:
         return pandas.read_csv(dataframe_filepath, nrows=0).columns.tolist()
 
     @staticmethod
-    def write_csv(destination_path, dataframe_ref=None, dataframe=None, copy=False, source_path=None):
+    def write_csv(destination_path, dataframe_ref=None, dataframe=None, copy=False, source_path=None, pickle=False):
         """
         Writes Dataframe as csv file to given path.
         """
@@ -164,9 +164,12 @@ class DatasetParallel:
         else:
             if copy and source_path is not None:
                 #print("Copying file from: " + source_path + " to: " + destination_path)
-                source_path = source_path
-                destination_path = destination_path
-                shutil.copy(source_path, destination_path)
+                try:
+                    source_path = source_path
+                    destination_path = destination_path
+                    shutil.copyfile(source_path, destination_path)
+                except:
+                    raise ValueError("Copying csv to dest failed in write_csv()!")
             else:
                 raise ValueError("Not enough values passed in write_csv()!")
 
