@@ -82,7 +82,7 @@ class DatasetParallel:
         
         #Aim for 10 partitions
         blocksize = filesize / num_partitions if filesize >= num_partitions else MB_1 
-        print("Blocksize of " + dataframe_filepath + " is:" + str(blocksize)) 
+        #print("Blocksize of " + dataframe_filepath + " is:" + str(blocksize)) 
 
         #Read DataFrame in parallel
         kwargs = {'sep': ',', 'header':'infer', 'encoding':'utf-8', 'dtype': str, 'keep_default_na': False, 'low_memory': False}
@@ -91,7 +91,7 @@ class DatasetParallel:
 
         pickled_dataframe = pickle.dumps(dataframe, protocol=pickle.HIGHEST_PROTOCOL)
         pickled_dataframe_size = len(pickled_dataframe)
-        print("Size of pickled dataframe " + str(pickled_dataframe_size))
+        #print("Size of pickled dataframe " + str(pickled_dataframe_size))
 
         shared_mem_area = sm.SharedMemory(name=mem_area_name, create=True, size=pickled_dataframe_size)
         shared_mem_area.buf[:pickled_dataframe_size] = pickled_dataframe
@@ -113,9 +113,18 @@ class DatasetParallel:
         for column in dataframe.columns.tolist():
             pickled_dataframe = pickle.dumps(dataframe[column], protocol=pickle.HIGHEST_PROTOCOL)
             pickled_dataframe_size = len(pickled_dataframe)
-            shared_mem_area = sm.SharedMemory(name=column, create=True, size=pickled_dataframe_size)
-            shared_mem_area.buf[:pickled_dataframe_size] = pickled_dataframe
-            shared_mem_area.close()
+            try:
+                shared_mem_area = sm.SharedMemory(name=column, create=True, size=pickled_dataframe_size)
+                shared_mem_area.buf[:pickled_dataframe_size] = pickled_dataframe
+                shared_mem_area.close()
+            except FileExistsError:
+                shared_mem_area = sm.SharedMemory(name=column, create=False, size=pickled_dataframe_size)
+                shared_mem_area.buf[:pickled_dataframe_size] = pickled_dataframe
+                shared_mem_area.close()
+            except Exception as shm_err:
+                print('Failed to create or attach to a split dataframe: {}'.format(shm_err))
+                raise 
+
             del shared_mem_area
         return
 
