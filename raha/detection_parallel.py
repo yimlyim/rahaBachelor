@@ -87,6 +87,8 @@ class DetectionParallel:
     #Todo
     def run_pattern_strategy(self, configuration, dataset_ref):
         """
+        Detects cells which don't match given detection strategy - Pattern Violation Detection.
+        Returns dict, which contains coordinate of potentially defect cells.
         """
         outputted_cells = {}
         dataset = dp.DatasetParallel.load_shared_dataset(dataset_ref)
@@ -106,7 +108,31 @@ class DetectionParallel:
 
     #Todo
     def run_rule_strategy(self, configuration, dataset_ref):
-        return {}
+        """
+        Detects cells which don't match given detection strategy - Rule Violation Detection.
+        Returns dict, which contains coordinate of potentially defect cells.
+        """
+        value_dict = {}
+        outputted_cells = {}
+        left_attribute, right_attribute = configuration
+        dataset = dp.DatasetParallel.load_shared_dataset(dataset_ref)
+        dataframe = dp.DatasetParallel.load_shared_dataframe(dataset.dirty_mem_ref)
+
+        left_attribute_j = dataframe.columns.get_loc(left_attribute)
+        right_attribute_j = dataframe.columns.get_loc(right_attribute)
+     
+        for i, row in dataframe.iterrows():
+            if row[left_attribute]:
+                if row[left_attribute] not in value_dict:
+                    value_dict[row[left_attribute]] = {}
+                if row[right_attribute]:
+                    value_dict[row[left_attribute]][row[right_attribute]] = 1
+        for i, row in dataframe.iterrows():
+            if row[left_attribute] in value_dict and len(value_dict[row[left_attribute]]) > 1:
+                outputted_cells[(i, left_attribute_j)] = ""
+                outputted_cells[(i, right_attribute_j)] = ""
+
+        return outputted_cells
 
     #Todo        
     def run_knowledge_strategy(self, configuration, dataset_ref):
