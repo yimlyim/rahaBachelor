@@ -42,7 +42,7 @@ class DetectionParallel:
         self.USER_LABELING_ACCURACY = 1.0
         self.BENCHMARK = True
         self.VERBOSE = False
-        self.SAVE_RESULTS = True
+        self.SAVE_RESULTS = False
         self.CLUSTERING_BASED_SAMPLING = True
         self.STRATEGY_FILTERING = False
         self.CLASSIFICATION_MODEL = "GBC"  # ["ABC", "DTC", "GBC", "GNB", "SGDC", "SVC"]
@@ -51,7 +51,7 @@ class DetectionParallel:
                                            RULE_VIOLATION_DETECTION, KNOWLEDGE_BASE_VIOLATION_DETECTION]
         self.HISTORICAL_DATASETS = []
     
-    #Todo
+
     def run_outlier_strategy(self, configuration, dataset_ref, strategy_name_hash):
         """
         Detects cells which don't match given detection strategy - Outlier Detection.
@@ -84,7 +84,7 @@ class DetectionParallel:
         os.remove(dataset_path)
         return outputted_cells
         
-    #Todo
+
     def run_pattern_strategy(self, configuration, dataset_ref):
         """
         Detects cells which don't match given detection strategy - Pattern Violation Detection.
@@ -106,7 +106,6 @@ class DetectionParallel:
 
         return outputted_cells
 
-    #Todo
     def run_rule_strategy(self, configuration, dataset_ref):
         """
         Detects cells which don't match given detection strategy - Rule Violation Detection.
@@ -133,8 +132,7 @@ class DetectionParallel:
                 outputted_cells[(i, right_attribute_j)] = ""
 
         return outputted_cells
-
-    #Todo        
+    
     def run_knowledge_strategy(self, configuration, dataset_ref):
         """
         Detects cells which don't match given detection strategy - Knowledge Base Violation Detection.
@@ -160,11 +158,9 @@ class DetectionParallel:
                 outputted_cells = self.run_outlier_strategy(configuration, dataset_ref, strategy_name_hashed)
             case constants.PATTERN_VIOLATION_DETECTION:
                 #Run pattern violation detection strategy
-                #Needs only column dataframe
                 outputted_cells = self.run_pattern_strategy(configuration, dataset_ref)
             case constants.RULE_VIOLATION_DETECTION:
                 #Run rule violation detection strategy
-                #NEEDS WHOLE DATAFRAME
                 outputted_cells = self.run_rule_strategy(configuration, dataset_ref)
             case constants.KNOWLEDGE_BASE_VIOLATION_DETECTION:
                 #Run knowledge base violation strategy
@@ -178,7 +174,13 @@ class DetectionParallel:
             "output": list(outputted_cells.keys()),
             "runtime": end_time - start_time
         }
-        
+
+        if self.SAVE_RESULTS:
+            dataset = dp.DatasetParallel.load_shared_dataset(dataset_ref)
+            pickle.dump(strategy_results, open(os.path.join(dataset.results_folder, "strategy-profiling", strategy_name_hashed + ".dictionary"), "wb"))
+        if self.VERBOSE:
+            print("{} cells are detected by {}".format(len(outputted_cells), strategy_name))
+
         return strategy_results
     
     @staticmethod
@@ -288,15 +290,14 @@ class DetectionParallel:
         
         results = list(itertools.chain.from_iterable(client.gather(futures=futures, direct=True)))
         endtime = time.time()
-        print(results)
         print("Raha strategy metadata generation(parallel): "+  str(endtime - starttime))
 
         #Start Detecting Errors in parallel
         futures = client.map(self.parallel_strat_runner_process, results)
         strategy_profiles = client.gather(futures=futures, direct=True)
-        print(strategy_profiles)
+        endtime = time.time()
+        print("Raha running all strategies total time(parallel): "+  str(endtime - starttime))
 
-
-        return
+        return strategy_profiles
 
 ########################################
