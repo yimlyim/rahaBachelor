@@ -1,5 +1,4 @@
 
-
 def load_file(domin_specific_file, domain_specific_types, rel2sub2obj):
     for line in domin_specific_file:
         splits = line.replace('\n', '').split('\t')
@@ -74,7 +73,7 @@ def domain_spec_colpair(data, i, j, rel2sub2obj, col_2_errors_repair, pair_cover
 
 
 def run(data, domin_specific_file_path, type_coverage=0.2, pair_coverage=0.15, ignore_null=True):
-    data = data.dataframe.to_numpy().tolist()
+    data = data.load_shared_dataframe(data.dirty_mem_ref).to_numpy().tolist()
     domain_specific_types = set()
     rel2sub2obj = {}
     col_2_errors_repair = {}
