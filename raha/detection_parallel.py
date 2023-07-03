@@ -136,7 +136,13 @@ class DetectionParallel:
 
     #Todo        
     def run_knowledge_strategy(self, configuration, dataset_ref):
-        return {}
+        """
+        Detects cells which don't match given detection strategy - Knowledge Base Violation Detection.
+        Returns dict, which contains coordinate of potentially defect cells.
+        """
+        dataset = dp.DatasetParallel.load_shared_dataset(dataset_ref)
+        outputted_cells = raha.tools.KATARA.katara.run(dataset, configuration)
+        return outputted_cells
 
     def parallel_strat_runner_process(self, args):
         """
