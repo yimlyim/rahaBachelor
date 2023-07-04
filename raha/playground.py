@@ -30,7 +30,7 @@ def parallel(i):
 
 
 if __name__ == "__main__":
-    cluster = LocalCluster(n_workers=5, threads_per_worker=1, processes=True, memory_limit='2GB')
+    cluster = LocalCluster(n_workers=8, threads_per_worker=1, processes=True, memory_limit='2GB')
     client = Client(cluster)
     """
     dataset_dictionary = {
@@ -88,10 +88,10 @@ if __name__ == "__main__":
     """
     ####Test Toy on run###
     dataset_dictionary = {
-    "name": "toy",
-    "path": "./../datasets/toy/dirty.csv",
-    "clean_path": "./../datasets/toy/clean.csv",
-    "results-folder": "./../datasets/toy/strategy-profiling-toy"
+    "name": "tax",
+    "path": "./../datasets/flights/dirty.csv",
+    "clean_path": "./../datasets/flights/clean.csv",
+    "results-folder": "./../datasets/flights/raha-baran-results-flights"
     }   
 
     dataset_par = dp.DatasetParallel(dataset_dictionary)
@@ -110,6 +110,11 @@ if __name__ == "__main__":
 
     det = detection_parallel.DetectionParallel()
     det.run_strategies(dataset_par)
+
+    df = pandas.read_csv("./../datasets/tax/dirty.csv", sep=",", header="infer", encoding="utf-8", dtype=str,
+                                    keep_default_na=False, low_memory=False).applymap(dp.DatasetParallel.value_normalizer)
+    print(df)
+    print(sys.getsizeof(df)/1000000)
 
 
     main_frame_area = sm.SharedMemory(name=dataset_par.dirty_mem_ref, create=False)
