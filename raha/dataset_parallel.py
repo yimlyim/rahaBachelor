@@ -88,6 +88,8 @@ class DatasetParallel:
         kwargs = {'sep': ',', 'header':'infer', 'encoding':'utf-8', 'dtype': str, 'keep_default_na': False, 'low_memory': False}
         dataframe = dask.dataframe.read_csv(urlpath=dataframe_filepath, blocksize=int(blocksize), **kwargs).applymap(DatasetParallel.value_normalizer)
         dataframe = client.compute(dataframe).result()
+        dataframe.reset_index(inplace=True, drop=True)
+
 
         pickled_dataframe = pickle.dumps(dataframe, protocol=pickle.HIGHEST_PROTOCOL)
         pickled_dataframe_size = len(pickled_dataframe)
