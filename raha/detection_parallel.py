@@ -106,7 +106,7 @@ class DetectionParallel:
 
         return outputted_cells
 
-    def run_rule_strategy(self, configuration, dataset_ref):
+    def run_rule_strategyITERTUPLES(self, configuration, dataset_ref):
         """
         Detects cells which don't match given detection strategy - Rule Violation Detection.
         Returns dict, which contains coordinate of potentially defect cells.
@@ -120,19 +120,108 @@ class DetectionParallel:
         left_attribute_j = dataframe.columns.get_loc(left_attribute)
         right_attribute_j = dataframe.columns.get_loc(right_attribute)
      
-        for i, row in dataframe.iterrows():
-            if row[left_attribute]:
-                if row[left_attribute] not in value_dict:
-                    value_dict[row[left_attribute]] = {}
-                if row[right_attribute]:
-                    value_dict[row[left_attribute]][row[right_attribute]] = 1
-        for i, row in dataframe.iterrows():
-            if row[left_attribute] in value_dict and len(value_dict[row[left_attribute]]) > 1:
+        for row_tuple in dataframe.itertuples():
+            if row_tuple[left_attribute_j]:
+                if row_tuple[left_attribute_j] not in value_dict:
+                    value_dict[row_tuple[left_attribute_j]] = {}
+                if row_tuple[right_attribute_j]:
+                    value_dict[row_tuple[left_attribute_j]][row_tuple[right_attribute_j]] = 1
+        for row_tuple in dataframe.itertuples():
+            i = row_tuple.Index
+            if row_tuple[left_attribute_j] in value_dict and len(value_dict[row_tuple[left_attribute_j]]) > 1:
                 outputted_cells[(i, left_attribute_j)] = ""
                 outputted_cells[(i, right_attribute_j)] = ""
 
         return outputted_cells
+
+    #Runs like run_rule_strategyNPARR but with items() mixed, testing performance
+    def run_rule_strategyITEMS(self, configuration, dataset_ref):
+        value_dict = {}
+        outputted_cells = {}
+        left_attribute, right_attribute = configuration
+
+        dataset = dp.DatasetParallel.load_shared_dataset(dataset_ref)
+        dataframe_left_column = dp.DatasetParallel.load_shared_dataframe(left_attribute)
+        dataframe_right_column = dp.DatasetParallel.load_shared_dataframe(right_attribute)
+
+        left_attribute_j = dp.DatasetParallel.get_column_names(dataset.dirty_path).index(left_attribute)
+        right_attribute_j = dp.DatasetParallel.get_column_names(dataset.dirty_path).index(right_attribute)
+
+        num_elements = len(dataframe_left_column)
+
+        for i, value in dataframe_left_column.items():
+            #print("{} Left attr:{}, {} Right attr:{}, index:{}".format(left_attribute,dataframe_left_column[i], right_attribute, dataframe_right_column[i], i))
+
+            if value:
+                if value not in value_dict:
+                    value_dict[value] = {}
+                if dataframe_right_column[i]:
+                    value_dict[value][dataframe_right_column[i]] = 1
+        for i in numpy.arange(0, num_elements):
+            if dataframe_left_column[i] in value_dict and len(value_dict[dataframe_left_column[i]]) > 1:
+                outputted_cells[(i, left_attribute_j)] = ""
+                outputted_cells[(i, right_attribute_j)] = ""
+        
+        return outputted_cells
+
+    def run_rule_strategyITERROWS(self,configuration, dataset_ref):
+        value_dictionary = {}
+        outputted_cells = {}
+        l_attribute, r_attribute = configuration
+        dataset = dp.DatasetParallel.load_shared_dataset(dataset_ref)
+        d = dp.DatasetParallel.load_shared_dataframe(dataset.dirty_mem_ref)
+
+        l_j = d.columns.get_loc(l_attribute)
+        r_j = d.columns.get_loc(r_attribute)
+
+        for i, row in d.iterrows():
+            if row[l_attribute]:
+                if row[l_attribute] not in value_dictionary:
+                    value_dictionary[row[l_attribute]] = {}
+                if row[r_attribute]:
+                    value_dictionary[row[l_attribute]][row[r_attribute]] = 1
+        for i, row in d.iterrows():
+            if row[l_attribute] in value_dictionary and len(value_dictionary[row[l_attribute]]) > 1:
+                outputted_cells[(i, l_j)] = ""
+                outputted_cells[(i, r_j)] = ""
+        return outputted_cells
     
+    def run_rule_strategy(self, configuration, dataset_ref):
+        """
+        Detects cells which don't match given detection strategy - Rule Violation Detection.
+        Returns dict, which contains coordinate of potentially defect cells.
+        """
+        value_dict = {}
+        outputted_cells = {}
+        left_attribute, right_attribute = configuration
+
+        #Read Columns, a more memory efficient approach
+        dataset = dp.DatasetParallel.load_shared_dataset(dataset_ref)
+        dataframe_left_column = dp.DatasetParallel.load_shared_dataframe(left_attribute)
+        dataframe_right_column = dp.DatasetParallel.load_shared_dataframe(right_attribute)
+
+        left_attribute_j = dp.DatasetParallel.get_column_names(dataset.dirty_path).index(left_attribute)
+        right_attribute_j = dp.DatasetParallel.get_column_names(dataset.dirty_path).index(right_attribute)
+
+        num_elements = len(dataframe_left_column)
+
+        for i in numpy.arange(0, num_elements):   
+            left_value = dataframe_left_column[i]
+            right_value = dataframe_right_column[i]
+            if left_value:
+                if left_value not in value_dict:
+                    value_dict[left_value] = {}
+                if right_value:
+                    value_dict[left_value][right_value] = 1
+
+        for i in numpy.arange(0, num_elements):
+            left_value = dataframe_left_column[i]
+            if left_value in value_dict and len(value_dict[left_value]) > 1:
+                outputted_cells[(i, left_attribute_j)] = ""
+                outputted_cells[(i, right_attribute_j)] = ""
+        
+        return outputted_cells
+
     def run_knowledge_strategy(self, configuration, dataset_ref):
         """
         Detects cells which don't match given detection strategy - Knowledge Base Violation Detection.
@@ -253,6 +342,7 @@ class DetectionParallel:
         dataset = dp.DatasetParallel.load_shared_dataset(dataset_ref)
         column_names = dp.DatasetParallel.get_column_names(dataset.dirty_path)
         column_pairs = [[col1, col2] for (col1,col2) in itertools.product(column_names, column_names) if col1 != col2]
+        print("\n\n\n Generated: {} FD pairs!!".format(len(column_pairs)))
         configurations.extend([[dataset_ref, RULE_VIOLATION_DETECTION, column_pair] for column_pair in column_pairs])
 
         return configurations
@@ -287,17 +377,18 @@ class DetectionParallel:
                 case _:
                     raise ValueError("Algorithm " + str(algorithm) + " is not supported!")
         
-        
+        #Gather Results of all workers, metadata configuration
         results = list(itertools.chain.from_iterable(client.gather(futures=futures, direct=True)))
         endtime = time.time()
         print("Raha strategy metadata generation(parallel): "+  str(endtime - starttime))
 
         #Start Detecting Errors in parallel
         futures = client.map(self.parallel_strat_runner_process, results)
+        #Gather Results of all workers, detected cells as dicts
         strategy_profiles = client.gather(futures=futures, direct=True)
         endtime = time.time()
         print("Raha running all strategies total time(parallel): "+  str(endtime - starttime))
-
+        #print(strategy_profiles)
         return strategy_profiles
 
 ########################################
