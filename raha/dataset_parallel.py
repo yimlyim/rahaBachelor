@@ -45,6 +45,7 @@ class DatasetParallel:
         self.dirty_mem_ref = self.hash_with_salt(dataset_dictionary["name"])
         self.clean_mem_ref = self.hash_with_salt(dataset_dictionary["name"] + '-clean')
         self.dirty_path = dataset_dictionary["path"]
+        self.dictionary = dataset_dictionary
 
         if "clean_path" in dataset_dictionary:
             self.has_ground_truth = True
