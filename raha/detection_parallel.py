@@ -50,6 +50,7 @@ class DetectionParallel:
         self.ERROR_DETECTION_ALGORITHMS = [OUTLIER_DETECTION, PATTERN_VIOLATION_DETECTION, 
                                            RULE_VIOLATION_DETECTION, KNOWLEDGE_BASE_VIOLATION_DETECTION]
         self.HISTORICAL_DATASETS = []
+        self.TFID_ENABLED = False
     
 
     def run_outlier_strategy(self, configuration, dataset_ref, strategy_name_hash):
@@ -339,12 +340,13 @@ class DetectionParallel:
         """
         Calculates Meta-Data for rule-violation application later on.
         This method just creates pairs of column names as potential FDs
+        Generates exactly n*(n-1) FD pairs
         """
         configurations = []
         dataset = dp.DatasetParallel.load_shared_dataset(dataset_ref)
         column_names = dp.DatasetParallel.get_column_names(dataset.dirty_path)
         column_pairs = [[col1, col2] for (col1,col2) in itertools.product(column_names, column_names) if col1 != col2]
-        print("\n\n\n Generated: {} FD pairs!!".format(len(column_pairs)))
+        
         configurations.extend([[dataset_ref, RULE_VIOLATION_DETECTION, column_pair] for column_pair in column_pairs])
 
         return configurations
@@ -360,11 +362,19 @@ class DetectionParallel:
         """
         Creates strategies metadata and executes each strategy for a seperate worker process
         """
-        #TODO - Implement strategy filtering if-else clause + preloading results
+        #TODO - Implement preloading results
         starttime = time.time()
         strategy_profile_path = os.path.join(dataset.results_folder, "strategy-profiling")
         client = get_client()
         futures = []
+
+        if self.STRATEGY_FILTERING:
+            for data_dictionary in self.HISTORICAL_DATASETS + [dataset.dictionary]:
+                raha.utilities.dataset_profiler(data_dictionary)
+                raha.utilities.evaluation_profiler(data_dictionary)
+            return raha.utilities.get_selected_strategies_via_historical_data(dataset.dictionary, self.HISTORICAL_DATASETS)
+
+        #TODO implement preloading here
 
         for algorithm_name in self.ERROR_DETECTION_ALGORITHMS:
             match algorithm_name:
