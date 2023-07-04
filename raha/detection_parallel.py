@@ -195,7 +195,7 @@ class DetectionParallel:
         outputted_cells = {}
         left_attribute, right_attribute = configuration
 
-        #Read Columns, a more memory efficient approach
+        #Read Columns as seperate Series Objects - a more memory efficient approach
         dataset = dp.DatasetParallel.load_shared_dataset(dataset_ref)
         dataframe_left_column = dp.DatasetParallel.load_shared_dataframe(left_attribute)
         dataframe_right_column = dp.DatasetParallel.load_shared_dataframe(right_attribute)
@@ -204,7 +204,8 @@ class DetectionParallel:
         right_attribute_j = dp.DatasetParallel.get_column_names(dataset.dirty_path).index(right_attribute)
 
         num_elements = len(dataframe_left_column)
-
+        
+        #Process through both columns and use the index to synchronize correct positional access
         for i in numpy.arange(0, num_elements):   
             left_value = dataframe_left_column[i]
             right_value = dataframe_right_column[i]
@@ -214,6 +215,7 @@ class DetectionParallel:
                 if right_value:
                     value_dict[left_value][right_value] = 1
 
+        #Update the defect cells dictionary of a cell, if left value references more than 1 right value
         for i in numpy.arange(0, num_elements):
             left_value = dataframe_left_column[i]
             if left_value in value_dict and len(value_dict[left_value]) > 1:
