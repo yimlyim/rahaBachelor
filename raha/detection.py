@@ -114,7 +114,7 @@ class Detection:
                     outputted_cells[(i, l_j)] = ""
                     outputted_cells[(i, r_j)] = ""
         elif algorithm == "KBVD":
-            outputted_cells = raha.tools.KATARA.katara.run(d, configuration)
+            outputted_cells = raha.tools.KATARA.katara.run(d, configuration, run_single=True)
         detected_cells_list = list(outputted_cells.keys())
         strategy_profile = {
             "name": strategy_name,
@@ -190,8 +190,8 @@ class Detection:
                             [[d, algorithm_name, configuration] for configuration in configuration_list])
                 #print(algorithm_and_configurations)
                 random.shuffle(algorithm_and_configurations)
-                #pool = multiprocessing.Pool()
-                #strategy_profiles_list = pool.map(self._strategy_runner_process, algorithm_and_configurations)
+                pool = multiprocessing.Pool()
+                strategy_profiles_list = pool.map(self._strategy_runner_process, algorithm_and_configurations)
                 # pool.close()
                 # pool.join()
         else:
@@ -200,6 +200,8 @@ class Detection:
                 raha.utilities.evaluation_profiler(dd)
             strategy_profiles_list = raha.utilities.get_selected_strategies_via_historical_data(d.dictionary, self.HISTORICAL_DATASETS)
         endtime = time.time()
+        d.strategy_profiles = strategy_profiles_list
+        #print(algorithm_and_configurations)
         print("Raha strategy metadata generation(non parallel): "+  str(endtime - starttime))
         
 
@@ -207,6 +209,7 @@ class Detection:
         """
         This method generates features.
         """
+        start_time = time.time()
         columns_features_list = []
         for j in range(d.dataframe.shape[1]):
             feature_vectors = numpy.zeros((d.dataframe.shape[0], len(d.strategy_profiles)))
@@ -229,12 +232,15 @@ class Detection:
             if self.VERBOSE:
                 print("{} Features are generated for column {}.".format(feature_vectors.shape[1], j))
             columns_features_list.append(feature_vectors)
+        end_time = time.time()
         d.column_features = columns_features_list
+        print("Generate features (non parallel): " + str(end_time-start_time))
 
     def build_clusters(self, d):
         """
         This method builds clusters.
         """
+        start_time = time.time()
         clustering_results = []
         for j in range(d.dataframe.shape[1]):
             feature_vectors = d.column_features[j]
@@ -256,6 +262,8 @@ class Detection:
             if self.VERBOSE:
                 print("A hierarchical clustering model is built for column {}.".format(j))
             clustering_results.append([clusters_k_c_ce, cells_clusters_k_ce])
+        end_time = time.time()
+        print("Build clusters (non parallel)" + str(end_time-start_time))
         d.clusters_k_j_c_ce = {k: {j: clustering_results[j][0][k] for j in range(d.dataframe.shape[1])} for k in
                                range(2, self.LABELING_BUDGET + 2)}
         d.cells_clusters_k_j_ce = {k: {j: clustering_results[j][1][k] for j in range(d.dataframe.shape[1])} for k in

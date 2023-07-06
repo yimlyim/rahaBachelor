@@ -34,10 +34,10 @@ if __name__ == "__main__":
     client = Client(cluster)
 
     dataset_dictionary = {
-    "name": "flights",
-    "path": "./../datasets/flights/dirty.csv",
-    "clean_path": "./../datasets/flights/clean.csv",
-    "results-folder": "./../datasets/flights/raha-baran-results-flights"
+    "name": "movies_1",
+    "path": "./../datasets/movies_1/dirty.csv",
+    "clean_path": "./../datasets/movies_1/clean.csv",
+    "results-folder": "./../datasets/movies_1/raha-baran-results-movies_1"
     }   
 
     dataset_par = dp.DatasetParallel(dataset_dictionary)
@@ -57,6 +57,7 @@ if __name__ == "__main__":
     print("x_frame:{} , y_frame {} || x_shared:{} , y_shared:{}".format(dataframe_loaded.shape[0], dataframe_loaded.shape[1], dataset_par.dataframe_num_rows, dataset_par.dataframe_num_cols))
     strategies = det.run_strategies(dataset_par)
     det.generate_features(dataset_par, strategies)
+    det.build_clusters(dataset_par, [])
 
     client.shutdown()
     client.close()
@@ -65,5 +66,7 @@ if __name__ == "__main__":
     dataset.results_folder = dataset_dictionary["results-folder"]
     det_single = dt.Detection()
     det_single.run_strategies(dataset)
+    det_single.generate_features(dataset)
+    det_single.build_clusters(dataset)
 
     dataset_par.cleanup_dataset()

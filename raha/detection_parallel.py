@@ -463,7 +463,7 @@ class DetectionParallel:
         end_time = time.time()
  
         print("Generate Features(parallel): " + str(end_time - start_time))
-        print(results)
+
         strategy_profiles_area.close()
         strategy_profiles_area.unlink()
         return results
@@ -512,6 +512,8 @@ class DetectionParallel:
 
         futures.append(client.map(self.build_clusters_single_column, [dataset.own_mem_ref]*dataset.dataframe_num_cols, numpy.arange(dataset.dataframe_num_cols)))
         results = client.gather(futures=futures, direct=True)
+        end_time = time.time()
+        print("Build clusters (parallel): " + str(end_time-start_time))
 
         return results
         
