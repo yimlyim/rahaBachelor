@@ -102,7 +102,7 @@ class DetectionParallel:
                 if len(re.findall("[" + character + "]", value, re.UNICODE)) > 0:
                     outputted_cells[(i, j)] = ""
             except:
-                print("Error occured in run_pattern_strategy in worker  " + str(get_worker().id))
+                #print("Error occured in run_pattern_strategy in worker  " + str(get_worker().id))
                 continue
 
         return outputted_cells
@@ -402,5 +402,71 @@ class DetectionParallel:
         print("Raha running all strategies total time(parallel): "+  str(endtime - starttime))
         #print(strategy_profiles)
         return strategy_profiles
+
+
+    def generate_features_one_col(self, dataset_ref, column_index):
+        """
+        Worker-Process. Calculates a feature-matrix for one column. Does not return the feature-matrix but 
+        rather a reference to it in a shared memory area. 
+        """
+        dataset = dp.DatasetParallel.load_shared_dataset(dataset_ref)
+        strategy_profiles_area = sm.SharedMemory(name=dataset.dirty_mem_ref + "-strategy_profiles", create=False)
+        strategy_profiles = pickle.loads(strategy_profiles_area.buf)
+        feature_vectors = numpy.zeros((dataset.dataframe_num_rows, len(strategy_profiles)))
+
+        for strategy_index, strategy_profile in enumerate(strategy_profiles):
+            strategy_name = json.loads(strategy_profile["name"])[0]
+
+            if strategy_name in self.ERROR_DETECTION_ALGORITHMS:
+                for cell in strategy_profile["output"]:
+                    if cell[1] == column_index:
+                        feature_vectors[cell[0], strategy_index] = 1.0
+        if self.TFID_ENABLED:
+            vectorizer = sklearn.feature_extraction.text.TfidfVectorizer(min_df=1, stop_words="english")
+            column_name = dp.DatasetParallel.get_column_names(dataset.dirty_path)[column_index]
+            corpus = dp.DatasetParallel.load_shared_dataframe(column_name)
+            try:
+                tfid_features = vectorizer.fit_transform(corpus)
+                feature_vectors = numpy.column_stack((feature_vectors, numpy.array(tfidf_features.todense())))
+            except:
+                pass
+
+        promising_strategies = numpy.any(feature_vectors != feature_vectors[0, :], axis=0)
+        feature_vectors = feature_vectors[:, promising_strategies] 
+
+        #Store feature vectors in a shared memory area
+        dp.DatasetParallel.create_shared_object(feature_vectors, dataset.dirty_mem_ref + "-feature-result-" + str(column_index))
+
+        strategy_profiles_area.close()
+        return dataset.dirty_mem_ref + "-feature-result-" + str(column_index)
+
+    def generate_features(self, dataset, strategy_profiles):
+        """
+        Generates feature vector for each column. A seperate matrix is being built for each column.
+        Strategies, which mark all cells as either detected or undetected are being discarded.
+        """
+        start_time = time.time()
+        client = get_client()
+        serialized_strategy_profiles = pickle.dumps(strategy_profiles)
+        serialized_strategy_profiles_size = len(serialized_strategy_profiles)
+        strategy_profiles_area = sm.SharedMemory(name=dataset.dirty_mem_ref + "-strategy_profiles", create=True, size=serialized_strategy_profiles_size)
+        strategy_profiles_area.buf[:serialized_strategy_profiles_size] = serialized_strategy_profiles
+
+        futures = []
+
+        for j in range(dataset.dataframe_num_cols):
+            futures.append(client.submit(self.generate_features_one_col, dataset.own_mem_ref, j))
+
+        results = client.gather(futures=futures, direct=True)
+        end_time = time.time()
+ 
+        print("Generate Features(parallel): " + str(end_time - start_time))
+        print(results)
+        strategy_profiles_area.close()
+        strategy_profiles_area.unlink()
+        return results
+
+
+
 
 ########################################
