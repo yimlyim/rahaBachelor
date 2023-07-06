@@ -76,6 +76,13 @@ class DatasetParallel:
         main_frame_area.unlink()
         del main_frame_area
 
+        #Clean-Up feature vectors
+        for j in range(self.dataframe_num_cols):
+            feature_frame_area = sm.SharedMemory(name= self.dirty_mem_ref + "-feature-result-" + str(j), create=False)
+            feature_frame_area.close()
+            feature_frame_area.unlink()
+            del feature_frame_area
+
         #Clean-Up Seperate Column-Dataframes.
         for col_name in DatasetParallel.get_column_names(self.dirty_path):
             col_frame_area = sm.SharedMemory(name=col_name, create=False)
@@ -88,6 +95,17 @@ class DatasetParallel:
         dataset_frame_area.close()
         dataset_frame_area.unlink()
         del dataset_frame_area
+
+    @staticmethod
+    def create_shared_object(obj, name):
+        pickled_obj= pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL)
+        pickled_obj_size = len(pickled_obj)
+        shared_mem_area = sm.SharedMemory(name=name, create=True, size=pickled_obj_size)
+        shared_mem_area.buf[:pickled_obj_size] = pickled_obj
+
+        shared_mem_area.close()
+        del shared_mem_area
+        return
 
     @staticmethod
     def create_shared_dataset(dataset):
@@ -169,6 +187,11 @@ class DatasetParallel:
 
             del shared_mem_area
         return
+
+    @staticmethod
+    def load_shared_object(mem_area_name):
+        shared_mem_area = sm.SharedMemory(name=mem_area_name, create=False)
+        return pickle.loads(shared_mem_area.buf)
 
     @staticmethod
     def load_shared_num_rows(dataset_ref):
