@@ -46,8 +46,8 @@ class DatasetParallel:
         self.clean_mem_ref = self.hash_with_salt(dataset_dictionary["name"] + '-clean')
         self.dirty_path = dataset_dictionary["path"]
         self.dictionary = dataset_dictionary
-        self.num_rows = 0
-        self.num_cols = 0
+        self.num_rows_ref = self.dirty_mem_ref + "-rows"
+        self.num_cols_ref = self.dirty_mem_ref + "-cols"
 
         if "clean_path" in dataset_dictionary:
             self.has_ground_truth = True
@@ -73,6 +73,16 @@ class DatasetParallel:
         main_frame_area.close()
         main_frame_area.unlink()
         del main_frame_area
+
+        rows_frame_area = sm.SharedMemory(name=self.num_rows_ref, create=False)
+        rows_frame_area.close()
+        rows_frame_area.unlink()
+        del rows_frame_area
+
+        cols_frame_area = sm.SharedMemory(name=self.num_cols_ref, create=False)
+        cols_frame_area.close()
+        cols_frame_area.unlink()
+        del cols_frame_area
 
         #Clean-Up Seperate Column-Dataframes.
         for col_name in DatasetParallel.get_column_names(self.dirty_path):
@@ -125,15 +135,26 @@ class DatasetParallel:
         dataframe.reset_index(inplace=True, drop=True)
 
 
+
         pickled_dataframe = pickle.dumps(dataframe, protocol=pickle.HIGHEST_PROTOCOL)
         pickled_dataframe_size = len(pickled_dataframe)
+        pickled_num_rows = pickle.dumps(dataframe.shape[0])
+        pickled_num_cols = pickle.dumps(dataframe.shape[1])
         #print("Size of pickled dataframe " + str(pickled_dataframe_size))
 
         shared_mem_area = sm.SharedMemory(name=mem_area_name, create=True, size=pickled_dataframe_size)
         shared_mem_area.buf[:pickled_dataframe_size] = pickled_dataframe
 
+        shared_mem_area_rows = sm.SharedMemory(name=mem_area_name + "-rows", create=True, size=len(pickled_num_rows))
+        shared_mem_area_cols = sm.SharedMemory(name=mem_area_name + "-cols", create=True, size=len(pickled_num_cols))
+        shared_mem_area_rows.buf[:len(pickled_num_rows)] = pickled_num_rows
+        shared_mem_area_cols.buf[:len(pickled_num_cols)] = pickled_num_cols
+
+
         shared_mem_area.close()
-        del shared_mem_area
+        shared_mem_area_rows.close()
+        shared_mem_area_cols.close()
+        del shared_mem_area, shared_mem_area_rows, shared_mem_area_cols
         return mem_area_name
 
 
