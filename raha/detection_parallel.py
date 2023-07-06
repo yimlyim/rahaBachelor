@@ -406,8 +406,10 @@ class DetectionParallel:
 
     def generate_features_one_col(self, dataset_ref, column_index):
         """
-        Worker-Process. Calculates a feature-matrix for one column. Does not return the feature-matrix but 
-        rather a reference to it in a shared memory area. 
+        Worker-Process. Calculates a feature-matrix for one column. 
+        A row represents 1 feature-vector of a cell, the row_index is the x-coordinate of the cell the column_index the y-coordinate.
+        A column represents the results of 1 specific strategy on *all* cells.
+        Does not return the feature-matrix but rather a reference to it in a shared memory area. 
         """
         dataset = dp.DatasetParallel.load_shared_dataset(dataset_ref)
         strategy_profiles_area = sm.SharedMemory(name=dataset.dirty_mem_ref + "-strategy_profiles", create=False)
