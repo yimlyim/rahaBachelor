@@ -186,6 +186,30 @@ class DatasetParallel:
         return
 
     @staticmethod
+    def load_shared_num_rows(dataset_ref):
+        """
+        Loads number of rows from shared memory.
+        """
+        dataset = self.load_shared_dataset(dataset_ref)
+        shared_mem_area = sm.SharedMemory(name=dataset.num_rows_ref, create=False)
+        deserialized_num_rows = pickle.loads(shared_mem_area)
+
+        del shared_mem_area
+        return deserialized_num_rows
+
+    @staticmethod
+    def load_shared_num_rows(dataset_ref):
+        """
+        Loads number of columns from shared memory.
+        """
+        dataset = self.load_shared_dataset(dataset_ref)
+        shared_mem_area = sm.SharedMemory(name=dataset.num_cols_ref, create=False)
+        deserialized_num_cols = pickle.loads(shared_mem_area)
+
+        del shared_mem_area
+        return deserialized_num_col
+
+    @staticmethod
     def load_shared_dataset(dataset_ref):
         """
         Loads a shared memory dataset, which is stored and serialized in a shared_memory area(dataset_ref).
