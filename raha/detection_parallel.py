@@ -454,7 +454,7 @@ class DetectionParallel:
 
         futures = []
 
-        for j in range(dataset.dataframe_num_cols):
+        for j in numpy.arange(dataset.dataframe_num_cols):
             futures.append(client.submit(self.generate_features_one_col, dataset.own_mem_ref, j))
 
         results = client.gather(futures=futures, direct=True)
@@ -465,6 +465,48 @@ class DetectionParallel:
         strategy_profiles_area.close()
         strategy_profiles_area.unlink()
         return results
+
+    def build_clusters_single_column(self, dataset_ref, column_index):
+        dataset = dp.DatasetParallel.load_shared_dataset(dataset_ref)
+        column_features = dp.DatasetParallel.load_shared_object(dataset.dirty_mem_ref + "-feature-result-" + str(column_index))
+
+        clusters_k_c_ce = {k : {} for k in range(2, self.LABELING_BUDGET + 2)}
+        cells_clusters_k_ce = {k : {} for k in range(2, self.LABELING_BUDGET + 2)}
+
+        try:
+            clustering_model = scipy.cluster.hierarchy.linkage(column_features, method="average", metric="cosine")
+            
+            for k in clusters_k_c_ce:
+                model_labels = [l-1 for l in scipy.cluster.hierarchy.fcluster(clustering_model, k, criterion="maxclust")]
+
+                for index, c in enumerate(model_labels):
+                        if c not in clusters_k_c_ce[k]:
+                            clusters_k_c_ce[k][c] = {}
+                        cell = (index, column_index)
+                        clusters_k_c_ce[k][c][cell] = 1
+                        cells_clusters_k_ce[k][cell] = c
+        except:
+            pass
+        
+        if self.VERBOSE:
+            print("A hierarchical clustering model is built for column {}".format(column_index))
+        
+        #print(clusters_k_c_ce if column_index == 0 else "")
+        #TODO Think about if you want to return these lists or rather save them in shared mem again.
+
+        return [clusters_k_c_ce, cells_clusters_k_ce]
+
+    def build_clusters(self, dataset, features_refs):
+        start_time = time.time()
+        clustering_results = []
+        client = get_client()
+        futures = []
+
+        futures.append(client.map(self.build_clusters_single_column, [dataset.own_mem_ref]*dataset.dataframe_num_cols, numpy.arange(dataset.dataframe_num_cols)))
+        results = client.gather(futures=futures, direct=True)
+
+        return results
+        
 
 
 
