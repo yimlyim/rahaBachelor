@@ -469,6 +469,9 @@ class DetectionParallel:
         return results
 
     def build_clusters_single_column(self, dataset_ref, column_index):
+        """
+        Worker-Process. Calculates all clusters and the respective cells of *one* column.
+        """
         dataset = dp.DatasetParallel.load_shared_dataset(dataset_ref)
         column_features = dp.DatasetParallel.load_shared_object(dataset.dirty_mem_ref + "-feature-result-" + str(column_index))
 
@@ -499,6 +502,9 @@ class DetectionParallel:
         return [clusters_k_c_ce, cells_clusters_k_ce]
 
     def build_clusters(self, dataset, features_refs):
+        """
+        Calculates clusters for all columns.
+        """
         start_time = time.time()
         clustering_results = []
         client = get_client()
