@@ -46,6 +46,8 @@ class DatasetParallel:
         self.clean_mem_ref = self.hash_with_salt(dataset_dictionary["name"] + '-clean')
         self.dirty_path = dataset_dictionary["path"]
         self.dictionary = dataset_dictionary
+        self.num_rows = 0
+        self.num_cols = 0
 
         if "clean_path" in dataset_dictionary:
             self.has_ground_truth = True
@@ -53,6 +55,37 @@ class DatasetParallel:
         if "repaired_path" in dataset_dictionary:
             self.has_been_repaired = True
             self.repaired_path = dataset_dictionary["repaired_path"]
+
+    def initialize_dataset(self):
+        """
+        Creates Shared-Memory areas and loads the corresponding dataframe into it.
+        For each column one area is created, also one for the whole dataframe with all columns
+        """
+        self.create_shared_dataframe(self.dirty_path, self.dirty_mem_ref)
+        self.create_shared_split_dataframe(self.dirty_mem_ref)
+
+    def cleanup_dataset(self):
+        """
+        Cleans up shared memory areas, which were created for computation.
+        """
+        #Clean-Up whole Dataframe.
+        main_frame_area = sm.SharedMemory(name=self.dirty_mem_ref, create=False)
+        main_frame_area.close()
+        main_frame_area.unlink()
+        del main_frame_area
+
+        #Clean-Up Seperate Column-Dataframes.
+        for col_name in DatasetParallel.get_column_names(self.dirty_path):
+            col_frame_area = sm.SharedMemory(name=col_name, create=False)
+            col_frame_area.close()
+            col_frame_area.unlink()
+            del col_frame_area
+
+        #Clean-Up Own Dataset in Shared-Mem, does not destroy this object that is already loaded.
+        dataset_frame_area = sm.SharedMemory(name=self.own_mem_ref, create=False)
+        dataset_frame_area.close()
+        dataset_frame_area.unlink()
+        del dataset_frame_area
 
     @staticmethod
     def create_shared_dataset(dataset):
