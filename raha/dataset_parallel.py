@@ -60,9 +60,11 @@ class DatasetParallel:
         """
         Creates Shared-Memory areas and loads the corresponding dataframe into it.
         For each column one area is created, also one for the whole dataframe with all columns
+        Stores its own object into shared memory
         """
         self.create_shared_dataframe(self.dirty_path, self.dirty_mem_ref)
         self.create_shared_split_dataframe(self.dirty_mem_ref)
+        self.create_shared_dataset(self)
 
     def cleanup_dataset(self):
         """
@@ -190,24 +192,24 @@ class DatasetParallel:
         """
         Loads number of rows from shared memory.
         """
-        dataset = self.load_shared_dataset(dataset_ref)
+        dataset = DatasetParallel.load_shared_dataset(dataset_ref)
         shared_mem_area = sm.SharedMemory(name=dataset.num_rows_ref, create=False)
-        deserialized_num_rows = pickle.loads(shared_mem_area)
+        deserialized_num_rows = pickle.loads(shared_mem_area.buf)
 
         del shared_mem_area
         return deserialized_num_rows
 
     @staticmethod
-    def load_shared_num_rows(dataset_ref):
+    def load_shared_num_cols(dataset_ref):
         """
         Loads number of columns from shared memory.
         """
-        dataset = self.load_shared_dataset(dataset_ref)
+        dataset = DatasetParallel.load_shared_dataset(dataset_ref)
         shared_mem_area = sm.SharedMemory(name=dataset.num_cols_ref, create=False)
-        deserialized_num_cols = pickle.loads(shared_mem_area)
+        deserialized_num_cols = pickle.loads(shared_mem_area.buf)
 
         del shared_mem_area
-        return deserialized_num_col
+        return deserialized_num_cols
 
     @staticmethod
     def load_shared_dataset(dataset_ref):
