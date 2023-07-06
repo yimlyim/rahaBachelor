@@ -46,8 +46,8 @@ class DatasetParallel:
         self.clean_mem_ref = self.hash_with_salt(dataset_dictionary["name"] + '-clean')
         self.dirty_path = dataset_dictionary["path"]
         self.dictionary = dataset_dictionary
-        self.num_rows_ref = self.dirty_mem_ref + "-rows"
-        self.num_cols_ref = self.dirty_mem_ref + "-cols"
+        self.dataframe_num_rows = 0
+        self.dataframe_num_cols = 0
 
         if "clean_path" in dataset_dictionary:
             self.has_ground_truth = True
@@ -62,7 +62,7 @@ class DatasetParallel:
         For each column one area is created, also one for the whole dataframe with all columns
         Stores its own object into shared memory
         """
-        self.create_shared_dataframe(self.dirty_path, self.dirty_mem_ref)
+        self.create_shared_dataframe(self.dirty_path, self.dirty_mem_ref, dataset=self)
         self.create_shared_split_dataframe(self.dirty_mem_ref)
         self.create_shared_dataset(self)
 
@@ -75,16 +75,6 @@ class DatasetParallel:
         main_frame_area.close()
         main_frame_area.unlink()
         del main_frame_area
-
-        rows_frame_area = sm.SharedMemory(name=self.num_rows_ref, create=False)
-        rows_frame_area.close()
-        rows_frame_area.unlink()
-        del rows_frame_area
-
-        cols_frame_area = sm.SharedMemory(name=self.num_cols_ref, create=False)
-        cols_frame_area.close()
-        cols_frame_area.unlink()
-        del cols_frame_area
 
         #Clean-Up Seperate Column-Dataframes.
         for col_name in DatasetParallel.get_column_names(self.dirty_path):
@@ -116,7 +106,7 @@ class DatasetParallel:
 
 
     @staticmethod
-    def create_shared_dataframe(dataframe_filepath, mem_area_name):
+    def create_shared_dataframe(dataframe_filepath, mem_area_name, dataset=None):
         """
         Creates a shared dataframe object. The given dataframe will be serialized and its output written into a shared memory area.
         Other Processes can obtain this area by referencing the shared memory area by its name. 
@@ -136,27 +126,20 @@ class DatasetParallel:
         dataframe = client.compute(dataframe).result()
         dataframe.reset_index(inplace=True, drop=True)
 
+        if dataset is not None:
+            dataset.dataframe_num_rows = dataframe.shape[0]
+            dataset.dataframe_num_cols = dataframe.shape[1]
 
 
         pickled_dataframe = pickle.dumps(dataframe, protocol=pickle.HIGHEST_PROTOCOL)
         pickled_dataframe_size = len(pickled_dataframe)
-        pickled_num_rows = pickle.dumps(dataframe.shape[0])
-        pickled_num_cols = pickle.dumps(dataframe.shape[1])
         #print("Size of pickled dataframe " + str(pickled_dataframe_size))
 
         shared_mem_area = sm.SharedMemory(name=mem_area_name, create=True, size=pickled_dataframe_size)
         shared_mem_area.buf[:pickled_dataframe_size] = pickled_dataframe
 
-        shared_mem_area_rows = sm.SharedMemory(name=mem_area_name + "-rows", create=True, size=len(pickled_num_rows))
-        shared_mem_area_cols = sm.SharedMemory(name=mem_area_name + "-cols", create=True, size=len(pickled_num_cols))
-        shared_mem_area_rows.buf[:len(pickled_num_rows)] = pickled_num_rows
-        shared_mem_area_cols.buf[:len(pickled_num_cols)] = pickled_num_cols
-
-
         shared_mem_area.close()
-        shared_mem_area_rows.close()
-        shared_mem_area_cols.close()
-        del shared_mem_area, shared_mem_area_rows, shared_mem_area_cols
+        del shared_mem_area
         return mem_area_name
 
 
