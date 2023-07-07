@@ -190,6 +190,8 @@ class Detection:
                             [[d, algorithm_name, configuration] for configuration in configuration_list])
                 #print(algorithm_and_configurations)
                 random.shuffle(algorithm_and_configurations)
+                endtime = time.time()
+                print("Raha strategy metadata generation(non parallel): " + str(endtime-starttime))
                 pool = multiprocessing.Pool()
                 strategy_profiles_list = pool.map(self._strategy_runner_process, algorithm_and_configurations)
                 # pool.close()
@@ -202,7 +204,7 @@ class Detection:
         endtime = time.time()
         d.strategy_profiles = strategy_profiles_list
         #print(algorithm_and_configurations)
-        print("Raha strategy metadata generation(non parallel): "+  str(endtime - starttime))
+        print("Raha strategy running(non parallel): "+  str(endtime - starttime))
         
 
     def generate_features(self, d):

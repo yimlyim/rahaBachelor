@@ -59,6 +59,7 @@ if __name__ == "__main__":
     det.generate_features(dataset_par, strategies)
     det.build_clusters(dataset_par, [])
 
+
     client.shutdown()
     client.close()
 
@@ -68,5 +69,13 @@ if __name__ == "__main__":
     det_single.run_strategies(dataset)
     det_single.generate_features(dataset)
     det_single.build_clusters(dataset)
+
+    start_time = time.time()
+    while len(dataset.labeled_tuples) < det_single.LABELING_BUDGET:
+        det_single.sample_tuple(dataset)
+        if dataset.has_ground_truth:
+            det_single.label_with_ground_truth(dataset)
+    end_time = time.time()
+    print("Sampling tuples and labeling with ground truth(non parallel): {}".format(end_time-start_time))
 
     dataset_par.cleanup_dataset()

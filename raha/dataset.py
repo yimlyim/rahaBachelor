@@ -40,6 +40,10 @@ class Dataset:
         self.name = dataset_dictionary["name"]
         self.path = dataset_dictionary["path"]
         self.dataframe = self.read_csv_dataset(dataset_dictionary["path"])
+        self.labeled_tuples = {}
+        self.labeled_cells = {}
+        self.labels_per_cluster = {}
+        self.detected_cells = {} 
         if "clean_path" in dataset_dictionary:
             self.has_ground_truth = True
             self.clean_path = dataset_dictionary["clean_path"]
@@ -66,25 +70,15 @@ class Dataset:
         sharedMemArea = sm.SharedMemory(name='Testarea', create=True, size=dset_size)
         dsetBytes = pickle.dumps(dset)
 
-    @staticmethod
-    def read_csv_dataset(dataset_path):
+
+    def read_csv_dataset(self, dataset_path):
         """
         This method reads a dataset from a csv file path.
         """
         #Params to get passed to pandas read_csv function
-        kwargs = {'sep': ',', 'header':'infer', 'encoding':'utf-8', 'dtype': str, 'keep_default_na': False, 'low_memory': False}
-
-        #Calculate File Size in Bytes to determine Blocksizes.
-        filesize = os.path.getsize(dataset_path)
-        sizeOfBlock = (int((filesize / 1e6)/100) + 1)*1e6 #Try 100 Partitions based on size of file, minimum 1MB
-    
-        dset = dd.read_csv(urlpath=dataset_path, blocksize=sizeOfBlock, **kwargs)
-        normalized_dset = dset.applymap(Dataset.value_normalizer)
-
-
-
-        #Returns Lazyily, be aware that you have to compute the result later, if you need real attributes from the frame
-        return normalized_dset
+        dataframe = pandas.read_csv(dataset_path, sep=",", header="infer", encoding="utf-8", dtype=str,
+                                    keep_default_na=False, low_memory=False).applymap(self.value_normalizer)
+        return dataframe
 
     @staticmethod
     def write_csv_dataset(dataset_path, dataframe):
