@@ -449,23 +449,17 @@ class DetectionParallel:
         """
         start_time = time.time()
         client = get_client()
-        serialized_strategy_profiles = pickle.dumps(strategy_profiles)
-        serialized_strategy_profiles_size = len(serialized_strategy_profiles)
-        strategy_profiles_area = sm.SharedMemory(name=dataset.dirty_mem_ref + "-strategy_profiles", create=True, size=serialized_strategy_profiles_size)
-        strategy_profiles_area.buf[:serialized_strategy_profiles_size] = serialized_strategy_profiles
-
+        dp.DatasetParallel.create_shared_object(strategy_profiles, dataset.dirty_mem_ref + "-strategy_profiles")
         futures = []
 
-        for j in numpy.arange(dataset.dataframe_num_cols):
-            futures.append(client.submit(self.generate_features_one_col, dataset.own_mem_ref, j))
+        #Start workers and append their future-references to the futures list. From each passed parameter-list one entry is passed to the worker.
+        futures.append(client.map(self.generate_features_one_col, [dataset.own_mem_ref] * dataset.dataframe_num_cols, numpy.arange(dataset.dataframe_num_cols)))
 
         results = client.gather(futures=futures, direct=True)
         end_time = time.time()
  
         print("Generate Features(parallel): " + str(end_time - start_time))
 
-        strategy_profiles_area.close()
-        strategy_profiles_area.unlink()
         return results
 
     def build_clusters_single_column(self, dataset_ref, column_index):
@@ -495,11 +489,13 @@ class DetectionParallel:
         
         if self.VERBOSE:
             print("A hierarchical clustering model is built for column {}".format(column_index))
-        
+        clusters_k_j_c_ce = {k : clusters_k_c_ce[k] for k in range(2, self.LABELING_BUDGET+2)}
+        cells_clusters_k_j_ce =  {k : cells_clusters_k_ce[k] for k in range(2, self.LABELING_BUDGET+2)}
+
         #print(clusters_k_c_ce if column_index == 0 else "")
         #TODO Think about if you want to return these lists or rather save them in shared mem again.
-
-        return [clusters_k_c_ce, cells_clusters_k_ce]
+        #print("\nI'm worker: {}, my task is column {}\nMy result is: {}".format(get_worker().id, column_index, [column_index, clusters_k_c_ce,"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" , cells_clusters_k_ce]))
+        return [column_index, clusters_k_j_c_ce, cells_clusters_k_j_ce]
 
     def build_clusters(self, dataset, features_refs):
         """
@@ -511,13 +507,17 @@ class DetectionParallel:
         futures = []
 
         futures.append(client.map(self.build_clusters_single_column, [dataset.own_mem_ref]*dataset.dataframe_num_cols, numpy.arange(dataset.dataframe_num_cols)))
-        results = client.gather(futures=futures, direct=True)
+        results = client.gather(futures=futures, direct=True)[0]
+        results.sort(key= lambda x: x[0], reverse=False)
+
         end_time = time.time()
         print("Build clusters (parallel): " + str(end_time-start_time))
-
+        print(results[1][2][2])
+        
         return results
         
 
+#2: {0: {(0, 0): 0, (1, 0): 0, (2, 0): 0, (3, 0): 0, (4, 0): 0, (5, 0): 0}, 1: {(0, 1): 0, (1, 1): 0, (2, 1): 0, (3, 1): 0, (4, 1): 0, (5, 1): 1}, 2: {(0, 2): 1, (1, 2): 1, (2, 2): 0, (3, 2): 0, (4, 2): 0, (5, 2): 1}}
 
 
 
