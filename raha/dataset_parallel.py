@@ -90,6 +90,12 @@ class DatasetParallel:
             col_frame_area.unlink()
             del col_frame_area
 
+        #Clean-Up strategy profiles
+        profiles_frame_area = sm.SharedMemory(name=self.dirty_mem_ref + "-strategy_profiles", create=False)
+        profiles_frame_area.close()
+        profiles_frame_area.unlink()
+        del profiles_frame_area
+
         #Clean-Up Own Dataset in Shared-Mem, does not destroy this object that is already loaded.
         dataset_frame_area = sm.SharedMemory(name=self.own_mem_ref, create=False)
         dataset_frame_area.close()
