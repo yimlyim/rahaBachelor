@@ -55,7 +55,7 @@ class Detection:
         self.LABELING_BUDGET = 20
         self.USER_LABELING_ACCURACY = 1.0
         self.VERBOSE = False
-        self.SAVE_RESULTS = True
+        self.SAVE_RESULTS = False
         self.CLUSTERING_BASED_SAMPLING = True
         self.STRATEGY_FILTERING = False
         self.CLASSIFICATION_MODEL = "GBC"  # ["ABC", "DTC", "GBC", "GNB", "SGDC", "SVC"]
@@ -268,6 +268,7 @@ class Detection:
                                range(2, self.LABELING_BUDGET + 2)}
         d.cells_clusters_k_j_ce = {k: {j: clustering_results[j][1][k] for j in range(d.dataframe.shape[1])} for k in
                                    range(2, self.LABELING_BUDGET + 2)}
+        #print(d.cells_clusters_k_j_ce[2][1])
 
     def sample_tuple(self, d):
         """
