@@ -48,6 +48,14 @@ class DatasetParallel:
         self.dictionary = dataset_dictionary
         self.dataframe_num_rows = 0
         self.dataframe_num_cols = 0
+        self.labeled_tuples = {}
+        self.labeled_cells = {}
+        self.labels_per_cluster = {}
+        self.detected_cells = {}
+        self.results_folder = os.path.join(os.path.dirname(dataset_dictionary["path"]), "raha-baran-results-" + dataset_dictionary["name"])
+
+        if not os.path.exists(self.results_folder):
+            os.mkdir(self.results_folder)
 
         if "clean_path" in dataset_dictionary:
             self.has_ground_truth = True

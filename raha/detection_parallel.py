@@ -512,9 +512,20 @@ class DetectionParallel:
 
         end_time = time.time()
         print("Build clusters (parallel): " + str(end_time-start_time))
-        print(results[1][2][2])
+        #print(results[1][2][2])
         
         return results
+    
+    def sample_tuple(self, dataset, clustering_results):
+        k = len(dataset.labeled_tuples + 2)
+        for j in numpy.arange(dataset.dataframe_num_cols):
+            for c in clustering_results[j][2][k]:
+                dataset.labels_per_cluster[(j, c)] = {cell: dataset.labeled_cells[cell][0] for cell in clustering_results[j][2][k][c] if cell[0] in dataset.labeled_tuples}
+
+        if self.CLUSTERING_BASED_SAMPLING:
+            #TODO 
+            print("")       
+        return
         
 
 #2: {0: {(0, 0): 0, (1, 0): 0, (2, 0): 0, (3, 0): 0, (4, 0): 0, (5, 0): 0}, 1: {(0, 1): 0, (1, 1): 0, (2, 1): 0, (3, 1): 0, (4, 1): 0, (5, 1): 1}, 2: {(0, 2): 1, (1, 2): 1, (2, 2): 0, (3, 2): 0, (4, 2): 0, (5, 2): 1}}
