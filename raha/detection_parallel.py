@@ -518,17 +518,13 @@ class DetectionParallel:
 
         end_time = time.time()
         print("Build clusters (parallel): " + str(end_time-start_time))
-        print(results[1][1][3])
 
-        
         return results
     
     def sample_tuple(self, dataset, clustering_results):
         """
         Calculates a sample-tuple which will later be labeled by the user or by the ground-truth
         """
-
-        start_time = time.time()
         k = len(dataset.labeled_tuples)+2
         for j in numpy.arange(dataset.dataframe_num_cols):
             for c in clustering_results[j][1][k]:
@@ -552,11 +548,28 @@ class DetectionParallel:
         p_tuple_score = tuple_score / sum_tuple_score
         dataset.sampled_tuple = numpy.random.choice(numpy.arange(dataset.dataframe_num_rows), 1, p=p_tuple_score)[0]
         end_time = time.time()
-        print("Sampling tuple(parallel but not parallelized): {}".format(end_time-start_time))
         if self.VERBOSE:
             print("Tuple {} is sampled".format(dataset.sampled_tuple))
 
         return dataset.sampled_tuple  
+    
+    def label_with_ground_truth(self, dataset):
+        k = len(dataset.labeled_tuples) + 2
+        dataset.labeled_tuples[dataset.sampled_tuple] = 1
+        actual_errors_dictionary = dataset.get_actual_errors_dictionary()
+        clean_dataframe = dp.DatasetParallel.load_shared_dataframe(dataset.clean_mem_ref)
+
+        for j in numpy.arange(dataset.dataframe_num_cols):
+            cell = (dataset.sampled_tuple, j)
+            user_label = int(cell in actual_errors_dictionary)
+            flip_result_chance = random.random()
+
+            if flip_result_chance > self.USER_LABELING_ACCURACY:
+                user_label = 1 - user_label
+            dataset.labeled_cells[cell] = [user_label, clean_dataframe.iloc[cell]]
+        if self.VERBOSE:
+            print("Tuple {} is labeled.".format(dataset.sampled_tuple))
+        return    
 
 #2: {0: {(0, 0): 0, (1, 0): 0, (2, 0): 0, (3, 0): 0, (4, 0): 0, (5, 0): 0}, 1: {(0, 1): 0, (1, 1): 0, (2, 1): 0, (3, 1): 0, (4, 1): 0, (5, 1): 1}, 2: {(0, 2): 1, (1, 2): 1, (2, 2): 0, (3, 2): 0, (4, 2): 0, (5, 2): 1}}
 
