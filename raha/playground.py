@@ -30,7 +30,7 @@ def parallel(i):
 
 
 if __name__ == "__main__":
-    cluster = LocalCluster(n_workers=8, threads_per_worker=1, processes=True, memory_limit='2GB')
+    cluster = LocalCluster(n_workers=os.cpu_count(), threads_per_worker=1, processes=True, memory_limit='2GB')
     client = Client(cluster)
 
     dataset_dictionary = {
@@ -57,12 +57,19 @@ if __name__ == "__main__":
     print("x_frame:{} , y_frame {} || x_shared:{} , y_shared:{}".format(dataframe_loaded.shape[0], dataframe_loaded.shape[1], dataset_par.dataframe_num_rows, dataset_par.dataframe_num_cols))
     strategies = det.run_strategies(dataset_par)
     det.generate_features(dataset_par, strategies)
-    det.build_clusters(dataset_par, [])
+    clusters = det.build_clusters(dataset_par, [])
+    start_time = time.time()
+    while len(dataset_par.labeled_tuples) < det.LABELING_BUDGET:
+        det.sample_tuple(dataset_par, clusters)
+        if dataset_par.has_ground_truth:
+            det.label_with_ground_truth(dataset_par)
+    end_time = time.time()
+    print("Sampling tuples and labeling with ground truth(nparallel): {}".format(end_time-start_time))
 
 
     client.shutdown()
     client.close()
-
+    print("")
     dataset = dset.Dataset(dataset_dictionary)
     dataset.results_folder = dataset_dictionary["results-folder"]
     det_single = dt.Detection()
@@ -77,5 +84,7 @@ if __name__ == "__main__":
             det_single.label_with_ground_truth(dataset)
     end_time = time.time()
     print("Sampling tuples and labeling with ground truth(non parallel): {}".format(end_time-start_time))
+    det_single.propagate_labels(dataset)
+    det_single.predict_labels(dataset)
 
     dataset_par.cleanup_dataset()

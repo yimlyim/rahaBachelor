@@ -270,7 +270,7 @@ class Detection:
                                range(2, self.LABELING_BUDGET + 2)}
         d.cells_clusters_k_j_ce = {k: {j: clustering_results[j][1][k] for j in range(d.dataframe.shape[1])} for k in
                                    range(2, self.LABELING_BUDGET + 2)}
-        #print(d.cells_clusters_k_j_ce[2][1])
+        #print(d.clusters_k_j_c_ce[20][1])
 
     def sample_tuple(self, d):
         """
@@ -313,6 +313,7 @@ class Detection:
             cell = (d.sampled_tuple, j)
             user_label = int(cell in actual_errors_dictionary)
             if random.random() > self.USER_LABELING_ACCURACY:
+                #Look if value is actually marked as error in the ground truth, else set probability to 1
                 user_label = 1 - user_label
             d.labeled_cells[cell] = [user_label, d.clean_dataframe.iloc[cell]]
         if self.VERBOSE:
@@ -322,6 +323,7 @@ class Detection:
         """
         This method propagates labels.
         """
+        start_time = time.time()
         d.extended_labeled_cells = {cell: d.labeled_cells[cell][0] for cell in d.labeled_cells}
         k = len(d.labeled_tuples) + 2 - 1
         for j in range(d.dataframe.shape[1]):
@@ -343,6 +345,8 @@ class Detection:
                                 sum(d.labels_per_cluster[(j, c)].values()) / len(d.labels_per_cluster[(j, c)]))
                             for cell in d.clusters_k_j_c_ce[k][j][c]:
                                 d.extended_labeled_cells[cell] = cluster_label
+        end_time = time.time()
+        print("Propagating labels(non parallel): {}".format(end_time-start_time))
         if self.VERBOSE:
             print("The number of labeled data cells increased from {} to {}.".format(len(d.labeled_cells), len(d.extended_labeled_cells)))
 
@@ -350,6 +354,7 @@ class Detection:
         """
         This method predicts the label of data cells.
         """
+        start_time = time.time()
         detected_cells_dictionary = {}
         for j in range(d.dataframe.shape[1]):
             feature_vectors = d.column_features[j]
@@ -384,6 +389,8 @@ class Detection:
             if self.VERBOSE:
                 print("A classifier is trained and applied on column {}.".format(j))
         d.detected_cells.update(detected_cells_dictionary)
+        end_time = time.time()
+        print("Prediction (non parallel): " + str(end_time-start_time))
 
     def store_results(self, d):
         """
