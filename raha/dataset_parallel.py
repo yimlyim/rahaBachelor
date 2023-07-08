@@ -53,6 +53,7 @@ class DatasetParallel:
         self.labels_per_cluster = {}
         self.detected_cells = {}
         self.results_folder = os.path.join(os.path.dirname(dataset_dictionary["path"]), "raha-baran-results-" + dataset_dictionary["name"])
+        self.differences_dict_mem_ref = self.dirty_mem_ref + "-differences-dict"
 
         if not os.path.exists(self.results_folder):
             os.mkdir(self.results_folder)
@@ -71,44 +72,72 @@ class DatasetParallel:
         Stores its own object into shared memory
         """
         self.create_shared_dataframe(self.dirty_path, self.dirty_mem_ref, dataset=self)
+        self.create_shared_dataframe(self.clean_path, self.clean_mem_ref)
         self.create_shared_split_dataframe(self.dirty_mem_ref)
         self.create_shared_dataset(self)
+        differences_dict = self.get_dataframes_difference(self.load_shared_dataframe(self.dirty_mem_ref), self.load_shared_dataframe(self.clean_mem_ref))
+        self.create_shared_object(differences_dict, self.differences_dict_mem_ref)
 
     def cleanup_dataset(self):
         """
         Cleans up shared memory areas, which were created for computation.
         """
-        #Clean-Up whole Dataframe.
-        main_frame_area = sm.SharedMemory(name=self.dirty_mem_ref, create=False)
-        main_frame_area.close()
-        main_frame_area.unlink()
-        del main_frame_area
+        #Clean-Up whole dirty Dataframe.
+        try:
+            main_frame_area = sm.SharedMemory(name=self.dirty_mem_ref, create=False)
+            main_frame_area.close()
+            main_frame_area.unlink()
+            del main_frame_area
+        except Exception as e: print(e)
+
+        #Clean-Up whole clean Dataframe
+        try:
+            clean_frame_area = sm.SharedMemory(name=self.clean_mem_ref, create=False)
+            clean_frame_area.close()
+            clean_frame_area.unlink()
+            del clean_frame_area
+        except Exception as e: print(e)
+
+        #Clean-Up differences-dict
+        try:
+            diff_dict_area = sm.SharedMemory(name=self.differences_dict_mem_ref, create=False)
+            diff_dict_area.close()
+            diff_dict_area.unlink()
+        except Exception as e: print(e)
 
         #Clean-Up feature vectors
-        for j in range(self.dataframe_num_cols):
-            feature_frame_area = sm.SharedMemory(name= self.dirty_mem_ref + "-feature-result-" + str(j), create=False)
-            feature_frame_area.close()
-            feature_frame_area.unlink()
-            del feature_frame_area
+        try:
+            for j in range(self.dataframe_num_cols):
+                feature_frame_area = sm.SharedMemory(name= self.dirty_mem_ref + "-feature-result-" + str(j), create=False)
+                feature_frame_area.close()
+                feature_frame_area.unlink()
+                del feature_frame_area
+        except Exception as e: print(e)
 
         #Clean-Up Seperate Column-Dataframes.
-        for col_name in DatasetParallel.get_column_names(self.dirty_path):
-            col_frame_area = sm.SharedMemory(name=col_name, create=False)
-            col_frame_area.close()
-            col_frame_area.unlink()
-            del col_frame_area
+        try:
+            for col_name in DatasetParallel.get_column_names(self.dirty_path):
+                col_frame_area = sm.SharedMemory(name=col_name, create=False)
+                col_frame_area.close()
+                col_frame_area.unlink()
+                del col_frame_area
+        except Exception as e: print(e)      
 
         #Clean-Up strategy profiles
-        profiles_frame_area = sm.SharedMemory(name=self.dirty_mem_ref + "-strategy_profiles", create=False)
-        profiles_frame_area.close()
-        profiles_frame_area.unlink()
-        del profiles_frame_area
+        try:
+            profiles_frame_area = sm.SharedMemory(name=self.dirty_mem_ref + "-strategy_profiles", create=False)
+            profiles_frame_area.close()
+            profiles_frame_area.unlink()
+            del profiles_frame_area
+        except Exception as e: print(e)
 
         #Clean-Up Own Dataset in Shared-Mem, does not destroy this object that is already loaded.
-        dataset_frame_area = sm.SharedMemory(name=self.own_mem_ref, create=False)
-        dataset_frame_area.close()
-        dataset_frame_area.unlink()
-        del dataset_frame_area
+        try:
+            dataset_frame_area = sm.SharedMemory(name=self.own_mem_ref, create=False)
+            dataset_frame_area.close()
+            dataset_frame_area.unlink()
+            del dataset_frame_area
+        except Exception as e: print(e)
 
     @staticmethod
     def create_shared_object(obj, name):
@@ -265,6 +294,16 @@ class DatasetParallel:
         return pandas.read_csv(dataframe_filepath, nrows=0).columns.tolist()
 
     @staticmethod
+    def read_csv_dataframe(dataframe_path):
+        """
+        This method reads a dataset from a csv file path.
+        """
+        #Params to get passed to pandas read_csv function
+        dataframe = pandas.read_csv(dataset_path, sep=",", header="infer", encoding="utf-8", dtype=str,
+                                    keep_default_na=False, low_memory=False).applymap(self.value_normalizer)
+        return dataframe
+
+    @staticmethod
     def write_csv(destination_path, dataframe_ref=None, dataframe=None, copy=False, source_path=None, pickle=False):
         """
         Writes Dataframe as csv file to given path.
@@ -285,6 +324,22 @@ class DatasetParallel:
             else:
                 raise ValueError("Not enough values passed in write_csv()!")
 
+    @staticmethod
+    def get_dataframes_difference(dataframe_1, dataframe_2):
+        """
+        This method compares two dataframes and returns the different cells.
+        """
+        if dataframe_1.shape != dataframe_2.shape:
+            sys.stderr.write("Two compared datasets do not have equal sizes!\n")
+        difference_dictionary = {}
+        difference_dataframe = dataframe_1.where(dataframe_1.values != dataframe_2.values).notna()
+        for j in range(dataframe_1.shape[1]):
+            for i in difference_dataframe.index[difference_dataframe.iloc[:, j]].tolist():
+                difference_dictionary[(i, j)] = dataframe_2.iloc[i, j]
+        return difference_dictionary
+
+    def get_actual_errors_dictionary(self):
+        return DatasetParallel.load_shared_object(self.differences_dict_mem_ref)
 
     @staticmethod
     def value_normalizer(value):
