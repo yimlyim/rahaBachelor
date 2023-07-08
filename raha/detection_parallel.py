@@ -474,13 +474,19 @@ class DetectionParallel:
 
         try:
             clustering_model = scipy.cluster.hierarchy.linkage(column_features, method="average", metric="cosine")
-            
+            #The bigger our labeling budget is, the more clusters will be generated per column
             for k in clusters_k_c_ce:
                 model_labels = [l-1 for l in scipy.cluster.hierarchy.fcluster(clustering_model, k, criterion="maxclust")]
-
+                # DEBUG print("\nWorker for column " + str(column_index) + " k:" + str(k) + " is " + str(model_labels))
+                #Model label contains a 1D-Array, where each index represents the row of a cell and column_index represents the column of the cell
+                #c is the number of the cluster this cell belongs to
                 for index, c in enumerate(model_labels):
                         if c not in clusters_k_c_ce[k]:
+                            #Create a dict containing all cells which belong to cluster number c
+                            #Depends on labeling budget k, which represents the total number of clusters available per column
                             clusters_k_c_ce[k][c] = {}
+                        
+                                #index = row, column_index = column -> coordinates of a specific cell
                         cell = (index, column_index)
                         clusters_k_c_ce[k][c][cell] = 1
                         cells_clusters_k_ce[k][cell] = c
@@ -512,21 +518,45 @@ class DetectionParallel:
 
         end_time = time.time()
         print("Build clusters (parallel): " + str(end_time-start_time))
-        #print(results[1][2][2])
+        print(results[1][1][3])
+
         
         return results
     
     def sample_tuple(self, dataset, clustering_results):
-        k = len(dataset.labeled_tuples + 2)
+        """
+        Calculates a sample-tuple which will later be labeled by the user or by the ground-truth
+        """
+
+        start_time = time.time()
+        k = len(dataset.labeled_tuples)+2
         for j in numpy.arange(dataset.dataframe_num_cols):
-            for c in clustering_results[j][2][k]:
-                dataset.labels_per_cluster[(j, c)] = {cell: dataset.labeled_cells[cell][0] for cell in clustering_results[j][2][k][c] if cell[0] in dataset.labeled_tuples}
+            for c in clustering_results[j][1][k]:
+                dataset.labels_per_cluster[(j, c)] = {cell : dataset.labeled_cells[cell][0] for cell in clustering_results[j][1][k][c]
+                                                             if cell[0] in dataset.labeled_tuples}
 
         if self.CLUSTERING_BASED_SAMPLING:
-            #TODO 
-            print("")       
-        return
-        
+            tuple_score = numpy.zeros(dataset.dataframe_num_rows)
+            for i in numpy.arange(dataset.dataframe_num_rows):
+                if i not in dataset.labeled_tuples:
+                    score = 0.0
+                    for j in numpy.arange(dataset.dataframe_num_cols):
+                        if clustering_results[j][1][k]:
+                            cell = (i, j)
+                            c = clustering_results[j][2][k][cell]
+                            score += math.exp(-len(dataset.labels_per_cluster[(j, c)]))
+                    tuple_score[i] = math.exp(score)
+        else:
+            tuple_score = numpy.ones(dataset.dataframe_num_rows)
+        sum_tuple_score = sum(tuple_score)
+        p_tuple_score = tuple_score / sum_tuple_score
+        dataset.sampled_tuple = numpy.random.choice(numpy.arange(dataset.dataframe_num_rows), 1, p=p_tuple_score)[0]
+        end_time = time.time()
+        print("Sampling tuple(parallel but not parallelized): {}".format(end_time-start_time))
+        if self.VERBOSE:
+            print("Tuple {} is sampled".format(dataset.sampled_tuple))
+
+        return dataset.sampled_tuple  
 
 #2: {0: {(0, 0): 0, (1, 0): 0, (2, 0): 0, (3, 0): 0, (4, 0): 0, (5, 0): 0}, 1: {(0, 1): 0, (1, 1): 0, (2, 1): 0, (3, 1): 0, (4, 1): 0, (5, 1): 1}, 2: {(0, 2): 1, (1, 2): 1, (2, 2): 0, (3, 2): 0, (4, 2): 0, (5, 2): 1}}
 
