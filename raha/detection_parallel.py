@@ -51,6 +51,7 @@ class DetectionParallel:
                                            RULE_VIOLATION_DETECTION, KNOWLEDGE_BASE_VIOLATION_DETECTION]
         self.HISTORICAL_DATASETS = []
         self.TFID_ENABLED = False
+        self.TIME_TOTAL = 0
     
 
     def run_outlier_strategy(self, configuration, dataset_ref, strategy_name_hash):
@@ -363,7 +364,7 @@ class DetectionParallel:
         Creates strategies metadata and executes each strategy for a seperate worker process
         """
         #TODO - Implement preloading results
-        starttime = time.time()
+        start_time = time.time()
         strategy_profile_path = os.path.join(dataset.results_folder, "strategy-profiling")
         client = get_client()
         futures = []
@@ -391,16 +392,20 @@ class DetectionParallel:
         
         #Gather Results of all workers, metadata configuration
         results = list(itertools.chain.from_iterable(client.gather(futures=futures, direct=True)))
-        endtime = time.time()
-        print("Raha strategy metadata generation(parallel): "+  str(endtime - starttime))
+        end_time = time.time()
+        self.TIME_TOTAL += end_time-start_time
+        print("Raha strategy metadata generation(parallel): "+  str(end_time - start_time))
 
         #Start Detecting Errors in parallel
         futures = client.map(self.parallel_strat_runner_process, results)
         #Gather Results of all workers, detected cells as dicts
         strategy_profiles = client.gather(futures=futures, direct=True)
-        endtime = time.time()
-        print("Raha running all strategies total time(parallel): "+  str(endtime - starttime))
+
+        end_time = time.time()
+        self.TIME_TOTAL += end_time-start_time
+        print("Raha running all strategies total time(parallel): "+  str(end_time - start_time))
         #print(strategy_profiles)
+
         return strategy_profiles
 
 
@@ -457,7 +462,7 @@ class DetectionParallel:
 
         results = client.gather(futures=futures, direct=True)
         end_time = time.time()
- 
+        self.TIME_TOTAL += end_time-start_time
         print("Generate Features(parallel): " + str(end_time - start_time))
 
         return results
@@ -498,6 +503,7 @@ class DetectionParallel:
         clusters_k_j_c_ce = {k : clusters_k_c_ce[k] for k in range(2, self.LABELING_BUDGET+2)}
         cells_clusters_k_j_ce =  {k : cells_clusters_k_ce[k] for k in range(2, self.LABELING_BUDGET+2)}
 
+        # cells_clusters_j_j_ce[k][j] = clustering_results[j][2][k]
         #print(clusters_k_c_ce if column_index == 0 else "")
         #TODO Think about if you want to return these lists or rather save them in shared mem again.
         #print("\nI'm worker: {}, my task is column {}\nMy result is: {}".format(get_worker().id, column_index, [column_index, clusters_k_c_ce,"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" , cells_clusters_k_ce]))
@@ -517,6 +523,7 @@ class DetectionParallel:
         results.sort(key= lambda x: x[0], reverse=False)
 
         end_time = time.time()
+        self.TIME_TOTAL += end_time-start_time
         print("Build clusters (parallel): " + str(end_time-start_time))
 
         return results
@@ -547,7 +554,6 @@ class DetectionParallel:
         sum_tuple_score = sum(tuple_score)
         p_tuple_score = tuple_score / sum_tuple_score
         dataset.sampled_tuple = numpy.random.choice(numpy.arange(dataset.dataframe_num_rows), 1, p=p_tuple_score)[0]
-        end_time = time.time()
         if self.VERBOSE:
             print("Tuple {} is sampled".format(dataset.sampled_tuple))
 
@@ -569,10 +575,110 @@ class DetectionParallel:
             dataset.labeled_cells[cell] = [user_label, clean_dataframe.iloc[cell]]
         if self.VERBOSE:
             print("Tuple {} is labeled.".format(dataset.sampled_tuple))
-        return    
+        return
+    
+    def propagate_labels(self, dataset, clustering_results):
+        start_time = time.time()
 
-#2: {0: {(0, 0): 0, (1, 0): 0, (2, 0): 0, (3, 0): 0, (4, 0): 0, (5, 0): 0}, 1: {(0, 1): 0, (1, 1): 0, (2, 1): 0, (3, 1): 0, (4, 1): 0, (5, 1): 1}, 2: {(0, 2): 1, (1, 2): 1, (2, 2): 0, (3, 2): 0, (4, 2): 0, (5, 2): 1}}
+        dataset.extended_labeled_cells = {cell: dataset.labeled_cells[cell][0] for cell in dataset.labeled_cells}
+        k = len(dataset.labeled_tuples) + 1
 
+        for j in numpy.arange(dataset.dataframe_num_cols):
+            cell = (dataset.sampled_tuple, j)
+            if cell in clustering_results[j][2][k]:
+                c = clustering_results [j][2][k][cell]
+                dataset.labels_per_cluster[(j,c)][cell] = dataset.labeled_cells[cell][0]
+        
+        if self.CLUSTERING_BASED_SAMPLING:
+            for j in numpy.arange(dataset.dataframe_num_cols):
+                for c in clustering_results[j][1][k]:
+                    if len(dataset.labels_per_cluster[(j, c)]) > 0:
+                        match self.LABEL_PROPAGATION_METHOD:
+                            case constants.HOMOGENEITY:
+                                cluster_label = list(dataset.labels_per_cluster[(j, c)].values())[0]
+                                if sum(dataset.labels_per_cluster[(j, c)].values()) in [0, len(dataset.labels_per_cluster[(j, c)])]:
+                                    for cell in clustering_results[j][1][k][c]:
+                                        dataset.extended_labeled_cells[cell] = cluster_label
+                            case constants.MAJORITY:
+                                cluster_label = round( sum(dataset.labels_per_cluster[(j, c)].values()) / len(dataset.labels_per_cluster[(j, c)]) )
+                                for cell in clustering_results[j][1][k][c]:
+                                        dataset.extended_labeled_cells[cell] = cluster_label
+                            case _:
+                                raise ValueError("The Label Propagation Method" + str(self.LABEL_PROPAGATION_METHOD) +  " is not supported! Try homogeneity or majority.")
+        if self.VERBOSE:
+            print("The number of labeled data cells increased from {} to {}.".format(len(dataset.labeled_cells), len(dataset.extended_labeled_cells)))
+      
+        end_time = time.time()
+        self.TIME_TOTAL += end_time-start_time
+        print("Propagating labels (parallel): " + str(end_time-start_time))
+        return
+
+    @staticmethod
+    def predict_labels_single_col(classification_model_name, verbose, dataset_ref, column_index):
+        detected_cells_dictionary = {}
+        dataset = dp.DatasetParallel.load_shared_dataset(dataset_ref)
+        feature_vectors = dp.DatasetParallel.load_shared_object(dataset.dirty_mem_ref + "-feature-result-" + str(column_index))
+        values = dp.DatasetParallel.load_shared_object(dataset.own_mem_ref + "-predictvariables")
+        labeled_tuples = values[1]
+        extended_labeled_cells = values[0]
+
+        x_train = [feature_vectors[i, :] for i in numpy.arange(dataset.dataframe_num_rows) if (i, column_index) in extended_labeled_cells]
+        y_train = [extended_labeled_cells[(i, column_index)] for i in numpy.arange(dataset.dataframe_num_rows) if (i, column_index) in extended_labeled_cells]
+        x_test = feature_vectors
+
+        #Check if all cells are 1's
+        if sum(y_train) == len(y_train):
+            predicted_labels = numpy.ones(dataset.dataframe_num_rows)
+        #Check if all cells are 0's 
+        elif sum(y_train) == 0 or len(x_train[0]) == 0:
+            predicted_labels = numpy.zeros(dataset.dataframe_num_rows)
+        else:
+            match classification_model_name:
+                case "ABC": 
+                    classification_model = sklearn.ensemble.AdaBoostClassifier(n_estimators=100)
+                case "DTC":
+                    classification_model = sklearn.tree.DecisionTreeClassifier(criterion="gini")
+                case "GBC": 
+                    classification_model = sklearn.ensemble.GradientBoostingClassifier(n_estimators=100)
+                case "GNB": 
+                    classification_model = sklearn.naive_bayes.GaussianNB()
+                case "KNC": 
+                    classification_model = sklearn.neighbors.KNeighborsClassifier(n_neighbors=1)
+                case "SGDC": 
+                    classification_model = sklearn.linear_model.SGDClassifier(loss="hinge", penalty="l2")
+                case "SVC": 
+                    classification_model = sklearn.svm.SVC(kernel="sigmoid")
+                case _:
+                    raise ValueError("Classification Model Name " + str(classification_model_name) + " is not supported!")
+            classification_model.fit(x_train, y_train)
+            predicted_labels = classification_model.predict(x_test)
+
+        for i, predicted_label in enumerate(predicted_labels):
+            if (i in labeled_tuples and extended_labeled_cells[(i, column_index)]) or (i not in labeled_tuples and predicted_label):
+                detected_cells_dictionary[(i, column_index)] = "1"
+        if verbose:
+            print("A classifier is trained and applied on column {}.".format(column_index))
+        return detected_cells_dictionary
+
+
+    def predict_labels(self, dataset, clustering_results):
+        start_time = time.time()
+        client = get_client()
+        futures = []
+        column_count = dataset.dataframe_num_cols
+        dp.DatasetParallel.create_shared_object([dataset.extended_labeled_cells, dataset.labeled_tuples], dataset.own_mem_ref + "-predictvariables")
+
+        futures.append(client.map(
+            DetectionParallel.predict_labels_single_col,
+            [self.CLASSIFICATION_MODEL]*column_count, [self.VERBOSE]*column_count, [dataset.own_mem_ref]*column_count, numpy.arange(column_count))
+            )
+        results = client.gather(futures=futures, direct=True)[0]
+        dataset.detected_cells = {cell: "JUST A DUMMY VALUE" for result in results for cell in result}
+
+
+        end_time = time.time()
+        self.TIME_TOTAL += end_time-start_time
+        print("Predict (parallel): " +str(end_time-start_time))
 
 
 ########################################
