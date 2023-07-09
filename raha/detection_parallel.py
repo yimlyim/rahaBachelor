@@ -353,6 +353,10 @@ class DetectionParallel:
         return configurations
     @staticmethod
     def setup_knowledge_violation_metadata(dataset_ref):
+        """
+        Calculates Meta-Data for knowledge-violation application later on.
+        This method just creates the parameters for Katara.
+        """
         configurations = []
         paths = [os.path.join(os.path.dirname(__file__), "tools", "KATARA", "knowledge-base", path) for path in os.listdir(os.path.join(os.path.dirname(__file__), "tools", "KATARA", "knowledge-base"))]
         configurations.extend([[dataset_ref, KNOWLEDGE_BASE_VIOLATION_DETECTION, path] for path in paths])
@@ -560,6 +564,9 @@ class DetectionParallel:
         return dataset.sampled_tuple  
     
     def label_with_ground_truth(self, dataset):
+        """
+        Labels one sampled tuple with ground truth.
+        """
         k = len(dataset.labeled_tuples) + 2
         dataset.labeled_tuples[dataset.sampled_tuple] = 1
         actual_errors_dictionary = dataset.get_actual_errors_dictionary()
@@ -578,6 +585,9 @@ class DetectionParallel:
         return
     
     def propagate_labels(self, dataset, clustering_results):
+        """
+        Propagates labels of labeled tuples in their respective cluster depending on the set propagation method.
+        """
         start_time = time.time()
 
         dataset.extended_labeled_cells = {cell: dataset.labeled_cells[cell][0] for cell in dataset.labeled_cells}
@@ -615,6 +625,10 @@ class DetectionParallel:
 
     @staticmethod
     def predict_labels_single_col(classification_model_name, verbose, dataset_ref, column_index):
+        """
+        Worker-Process. Trains a classifier for 1 column for erronous cells classification.
+        Returns predicted cells of 1 specific column.
+        """
         detected_cells_dictionary = {}
         dataset = dp.DatasetParallel.load_shared_dataset(dataset_ref)
         feature_vectors = dp.DatasetParallel.load_shared_object(dataset.dirty_mem_ref + "-feature-result-" + str(column_index))
@@ -662,6 +676,10 @@ class DetectionParallel:
 
 
     def predict_labels(self, dataset, clustering_results):
+        """
+        Predicts labels of unclustered cells in a parallel manner.
+        Returns all predicted cells of each column.
+        """
         start_time = time.time()
         client = get_client()
         futures = []
