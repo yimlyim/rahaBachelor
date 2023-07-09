@@ -64,8 +64,11 @@ if __name__ == "__main__":
         if dataset_par.has_ground_truth:
             det.label_with_ground_truth(dataset_par)
     end_time = time.time()
-    print("Sampling tuples and labeling with ground truth(nparallel): {}".format(end_time-start_time))
+    det.TIME_TOTAL += end_time-start_time
+    print("Sampling tuples and labeling with ground truth(parallel): {}".format(end_time-start_time))
+    det.propagate_labels(dataset_par, clusters)
 
+    det.predict_labels(dataset_par, clusters)
 
     client.shutdown()
     client.close()
@@ -83,8 +86,10 @@ if __name__ == "__main__":
         if dataset.has_ground_truth:
             det_single.label_with_ground_truth(dataset)
     end_time = time.time()
+    det_single.TIME_TOTAL += end_time-start_time
     print("Sampling tuples and labeling with ground truth(non parallel): {}".format(end_time-start_time))
     det_single.propagate_labels(dataset)
     det_single.predict_labels(dataset)
+    print("Raha parallel(total):{}\nRaha non parallel(total):{}\nPerformance: {}".format(det.TIME_TOTAL, det_single.TIME_TOTAL, det.TIME_TOTAL/det_single.TIME_TOTAL))
 
     dataset_par.cleanup_dataset()
