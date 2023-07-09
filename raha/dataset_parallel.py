@@ -44,6 +44,7 @@ class DatasetParallel:
         self.own_mem_ref = self.hash_with_salt(constants.DATASET_MEMORY_REF)
         self.dirty_mem_ref = self.hash_with_salt(dataset_dictionary["name"])
         self.clean_mem_ref = self.hash_with_salt(dataset_dictionary["name"] + '-clean')
+        self.differences_dict_mem_ref = self.dirty_mem_ref + "-differences-dict"
         self.dirty_path = dataset_dictionary["path"]
         self.dictionary = dataset_dictionary
         self.dataframe_num_rows = 0
@@ -53,7 +54,6 @@ class DatasetParallel:
         self.labels_per_cluster = {}
         self.detected_cells = {}
         self.results_folder = os.path.join(os.path.dirname(dataset_dictionary["path"]), "raha-baran-results-" + dataset_dictionary["name"])
-        self.differences_dict_mem_ref = self.dirty_mem_ref + "-differences-dict"
 
         if not os.path.exists(self.results_folder):
             os.mkdir(self.results_folder)
@@ -129,6 +129,13 @@ class DatasetParallel:
             profiles_frame_area.close()
             profiles_frame_area.unlink()
             del profiles_frame_area
+        except Exception as e: print(e)
+
+        #Clean-Up values that were shared for prediction phase
+        try:
+            predict_area = sm.SharedMemory(name=self.own_mem_ref + "-predictvariables", create=False)
+            predict_area.close()
+            predict_area.unlink()
         except Exception as e: print(e)
 
         #Clean-Up Own Dataset in Shared-Mem, does not destroy this object that is already loaded.
