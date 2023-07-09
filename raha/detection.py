@@ -62,6 +62,7 @@ class Detection:
         self.LABEL_PROPAGATION_METHOD = "homogeneity"   # ["homogeneity", "majority"]
         self.ERROR_DETECTION_ALGORITHMS = ["OD", "PVD", "RVD", "KBVD"]   # ["OD", "PVD", "RVD", "KBVD", "TFIDF"]
         self.HISTORICAL_DATASETS = []
+        self.TIME_TOTAL = 0
 
     def _strategy_runner_process(self, args):
         """
@@ -147,7 +148,7 @@ class Detection:
         """
         This method runs (all or the promising) strategies.
         """
-        starttime = time.time()
+        start_time = time.time()
         sp_folder_path = os.path.join(d.results_folder, "strategy-profiling")
         if not self.STRATEGY_FILTERING:
             if os.path.exists(sp_folder_path) and False:
@@ -190,8 +191,9 @@ class Detection:
                             [[d, algorithm_name, configuration] for configuration in configuration_list])
                 #print(algorithm_and_configurations)
                 random.shuffle(algorithm_and_configurations)
-                endtime = time.time()
-                print("Raha strategy metadata generation(non parallel): " + str(endtime-starttime))
+                end_time = time.time()
+                print("Raha strategy metadata generation(non parallel): " + str(end_time-start_time))
+                self.TIME_TOTAL += end_time-start_time
                 pool = multiprocessing.Pool()
                 strategy_profiles_list = pool.map(self._strategy_runner_process, algorithm_and_configurations)
                 # pool.close()
@@ -201,10 +203,11 @@ class Detection:
                 raha.utilities.dataset_profiler(dd)
                 raha.utilities.evaluation_profiler(dd)
             strategy_profiles_list = raha.utilities.get_selected_strategies_via_historical_data(d.dictionary, self.HISTORICAL_DATASETS)
-        endtime = time.time()
+        end_time = time.time()
+        self.TIME_TOTAL += end_time-start_time
         d.strategy_profiles = strategy_profiles_list
         #print(algorithm_and_configurations)
-        print("Raha strategy running(non parallel): "+  str(endtime - starttime))
+        print("Raha strategy running(non parallel): "+  str(end_time - start_time))
         
 
     def generate_features(self, d):
@@ -235,6 +238,7 @@ class Detection:
                 print("{} Features are generated for column {}.".format(feature_vectors.shape[1], j))
             columns_features_list.append(feature_vectors)
         end_time = time.time()
+        self.TIME_TOTAL += end_time-start_time
         d.column_features = columns_features_list
         print("Generate features (non parallel): " + str(end_time-start_time))
 
@@ -264,13 +268,16 @@ class Detection:
             if self.VERBOSE:
                 print("A hierarchical clustering model is built for column {}.".format(j))
             clustering_results.append([clusters_k_c_ce, cells_clusters_k_ce])
-        end_time = time.time()
-        print("Build clusters (non parallel)" + str(end_time-start_time))
+
         d.clusters_k_j_c_ce = {k: {j: clustering_results[j][0][k] for j in range(d.dataframe.shape[1])} for k in
                                range(2, self.LABELING_BUDGET + 2)}
         d.cells_clusters_k_j_ce = {k: {j: clustering_results[j][1][k] for j in range(d.dataframe.shape[1])} for k in
                                    range(2, self.LABELING_BUDGET + 2)}
         #print(d.clusters_k_j_c_ce[20][1])
+        end_time = time.time()
+        self.TIME_TOTAL += end_time-start_time
+        print("Build clusters (non parallel)" + str(end_time-start_time))
+
 
     def sample_tuple(self, d):
         """
@@ -313,7 +320,7 @@ class Detection:
             cell = (d.sampled_tuple, j)
             user_label = int(cell in actual_errors_dictionary)
             if random.random() > self.USER_LABELING_ACCURACY:
-                #Look if value is actually marked as error in the ground truth, else set probability to 1
+                
                 user_label = 1 - user_label
             d.labeled_cells[cell] = [user_label, d.clean_dataframe.iloc[cell]]
         if self.VERBOSE:
@@ -346,6 +353,7 @@ class Detection:
                             for cell in d.clusters_k_j_c_ce[k][j][c]:
                                 d.extended_labeled_cells[cell] = cluster_label
         end_time = time.time()
+        self.TIME_TOTAL += end_time-start_time
         print("Propagating labels(non parallel): {}".format(end_time-start_time))
         if self.VERBOSE:
             print("The number of labeled data cells increased from {} to {}.".format(len(d.labeled_cells), len(d.extended_labeled_cells)))
@@ -390,6 +398,7 @@ class Detection:
                 print("A classifier is trained and applied on column {}.".format(j))
         d.detected_cells.update(detected_cells_dictionary)
         end_time = time.time()
+        self.TIME_TOTAL += end_time-start_time
         print("Prediction (non parallel): " + str(end_time-start_time))
 
     def store_results(self, d):
