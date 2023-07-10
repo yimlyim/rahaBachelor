@@ -51,7 +51,9 @@ class DetectionParallel:
                                            RULE_VIOLATION_DETECTION, KNOWLEDGE_BASE_VIOLATION_DETECTION]
         self.HISTORICAL_DATASETS = []
         self.TFID_ENABLED = False
+        self.PRELOADING = False
         self.TIME_TOTAL = 0
+
     
 
     def run_outlier_strategy(self, configuration, dataset_ref, strategy_name_hash):
@@ -367,7 +369,6 @@ class DetectionParallel:
         """
         Creates strategies metadata and executes each strategy for a seperate worker process
         """
-        #TODO - Implement preloading results
         start_time = time.time()
         strategy_profile_path = os.path.join(dataset.results_folder, "strategy-profiling")
         client = get_client()
@@ -379,7 +380,17 @@ class DetectionParallel:
                 raha.utilities.evaluation_profiler(data_dictionary)
             return raha.utilities.get_selected_strategies_via_historical_data(dataset.dictionary, self.HISTORICAL_DATASETS)
 
-        #TODO implement preloading here
+        if os.path.exists(strategy_profile_path) and self.PRELOADING:
+            sys.stderr.write("Preloading strategies' results, as they have already been run on the dataset\n")
+            strategy_profiles = [pickle.load(open(os.path.join(strategy_profile_path, strategy_file), "rb"))
+                                 for strategy_file in os.listdir(strategy_profile_path)]
+            end_time = time.time()
+            self.TIME_TOTAL += end_time-start_time
+            print("Preloading strategies (parallel): " + str(end_time-start_time))
+            return strategy_profiles
+        if self.SAVE_RESULTS:
+            os.mkdir(strategy_profile_path)
+            
 
         for algorithm_name in self.ERROR_DETECTION_ALGORITHMS:
             match algorithm_name:
@@ -453,7 +464,7 @@ class DetectionParallel:
 
     def generate_features(self, dataset, strategy_profiles):
         """
-        Generates feature vector for each column. A seperate matrix is being built for each column.
+        Calculates feature vector for each column. A seperate matrix is being built for each column.
         Strategies, which mark all cells as either detected or undetected are being discarded.
         """
         start_time = time.time()
@@ -486,7 +497,6 @@ class DetectionParallel:
             #The bigger our labeling budget is, the more clusters will be generated per column
             for k in clusters_k_c_ce:
                 model_labels = [l-1 for l in scipy.cluster.hierarchy.fcluster(clustering_model, k, criterion="maxclust")]
-                # DEBUG print("\nWorker for column " + str(column_index) + " k:" + str(k) + " is " + str(model_labels))
                 #Model label contains a 1D-Array, where each index represents the row of a cell and column_index represents the column of the cell
                 #c is the number of the cluster this cell belongs to
                 for index, c in enumerate(model_labels):
